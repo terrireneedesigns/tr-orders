@@ -64,7 +64,7 @@ export default {
           h('h2', { class: 'label' }, 'Order history'),
           orders === null ? h('div', { class: 'spinner', 'aria-label': 'Loading' })
             : orders.length ? h('ul', { class: 'list' }, orders.map((o) => h('li', null,
-              h('div', { class: 'list-row' },
+              h('a', { class: 'list-row', href: '#/orders/' + encodeURIComponent(o.number) },
                 h('div', { class: 'grow' },
                   h('div', null, o.number || (o.type === 'quote' ? 'Quote' : 'Order')),
                   h('div', { class: 'small muted' }, orderStatus(o) + ' · ' + formatDate(o.created_at))),

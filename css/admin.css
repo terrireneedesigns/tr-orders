@@ -124,3 +124,69 @@ body { overscroll-behavior-y: none; }
 .badge-premium { background: var(--ink); color: var(--gold); }
 .sheet h2 { margin-bottom: 16px; }
 .group-label { margin-top: 24px; }
+
+/* ---------- orders (milestone 4) ---------- */
+
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin: 0 calc(-1 * var(--gap)); padding-left: var(--gap); padding-right: var(--gap); scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--white); color: var(--ink); font: 500 16px var(--font-body); cursor: pointer; white-space: nowrap;
+}
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--cream); }
+
+.note-warn {
+  background: #FBF3DF; border: 1px solid #E6D29F; border-left: 4px solid var(--gold-text);
+  border-radius: var(--radius); padding: 12px 14px; margin: 12px 0;
+}
+.note-warn p { margin: 0 0 8px; }
+.note-warn p:last-child { margin-bottom: 0; }
+.row-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.customer-chosen { display: flex; align-items: center; gap: 12px; }
+
+.item-card { background: var(--panel); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; display: grid; gap: 12px; }
+.item-head { display: flex; justify-content: space-between; align-items: center; }
+.item-head .label { margin: 0; }
+.danger-link { color: var(--oxblood); }
+.item-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.item-meta .grow { flex: 1; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; }
+.stepper .qty-value { min-width: 36px; text-align: center; font-weight: 600; font-size: 20px; }
+.order-lines { display: grid; gap: 10px; }
+.order-line { background: var(--cream); border-radius: var(--radius); padding: 10px; display: grid; gap: 8px; }
+.order-line .line-bottom, .discount-box .line-bottom { display: flex; align-items: center; gap: 8px; }
+.order-line .line-bottom .grow, .discount-box .line-bottom .grow { flex: 1; }
+.order-line .money, .discount-box .money { flex: 0 1 140px; min-width: 100px; }
+.order-line .dollar, .discount-box .dollar { font-weight: 500; color: var(--muted); }
+.line-tag { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold-text); }
+.item-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.item-total { display: flex; justify-content: space-between; align-items: baseline; border-top: 2px solid var(--ink); padding-top: 10px; font-weight: 500; }
+.item-total .amount { font-family: var(--font-head); font-size: 24px; font-weight: 600; }
+.item-details { border-top: 1px solid var(--line); padding-top: 12px; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.spots { display: grid; gap: 10px; }
+.spot-card { background: var(--cream); border-radius: var(--radius); padding: 12px; display: grid; gap: 8px; }
+.spot-head { display: flex; align-items: flex-start; gap: 8px; }
+.spot-head .grow { flex: 1; }
+.spot-card .toggle-row { min-height: 48px; padding: 0; }
+.patch-pick {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; min-height: var(--control); padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); color: var(--ink);
+  font: 400 17px var(--font-body); text-align: left; cursor: pointer;
+}
+.patch-pick .chev { margin-left: auto; color: var(--muted); font-size: 22px; }
+.list-row.selected { background: #FBF3DF; }
+
+.totals { display: grid; gap: 8px; }
+.totals-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.totals-row.grand { border-top: 2px solid var(--ink); padding-top: 10px; font-weight: 600; }
+.totals-row.grand .amount { font-family: var(--font-head); font-size: 28px; }
+.discount-box { display: grid; gap: 8px; padding: 10px; background: var(--cream); border-radius: var(--radius); }
+.more-options { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 12px; }
+.more-options summary { min-height: var(--tap); display: flex; align-items: center; font-weight: 500; cursor: pointer; color: var(--gold-text); }
+
+.item-view { display: grid; gap: 8px; }
+.line-list, .spot-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.line-list li { display: flex; justify-content: space-between; gap: 12px; font-size: 16px; }
+.details-view p { margin: 4px 0; }

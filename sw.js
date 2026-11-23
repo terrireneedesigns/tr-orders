@@ -6,7 +6,7 @@
 // Bump VERSION (keep it equal to APP_VERSION in js/config.js) when files are added,
 // removed or renamed, so old copies are cleared.
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const SHELL_CACHE = 'tr-shell-' + VERSION;
 const FONT_CACHE = 'tr-fonts-v1';
 
@@ -22,6 +22,7 @@ const SHELL = [
   'js/store.js',
   'js/ui.js',
   'js/money.js',
+  'js/rules.js',
   'js/app.js',
   'js/screens/login.js',
   'js/screens/home.js',
@@ -34,7 +35,9 @@ const SHELL = [
   'js/screens/customer-detail.js',
   'js/screens/customer-edit.js',
   'js/screens/settings.js',
-  'js/screens/coming-soon.js',
+  'js/screens/order-edit.js',
+  'js/screens/order-item.js',
+  'js/screens/order-detail.js',
   'assets/logo-full-sm.png',
   'assets/logo-monogram-sm.png',
   'assets/icon-180.png',

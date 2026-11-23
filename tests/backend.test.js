@@ -19,6 +19,11 @@ function makeSheet(name) {
     getName: () => name,
     getMaxRows: () => s.maxRows,
     insertRowsAfter: (_r, n) => { s.maxRows += n; },
+    deleteRows: (start, n) => {
+      if (start < 2 || n < 1) throw new Error('bad deleteRows');
+      if (s.maxRows - n < 2) throw new Error('This action would delete all non-frozen rows in the sheet');
+      s.data.splice(start - 1, n); s.maxRows -= n;
+    },
     getLastRow: () => {
       for (let r = s.data.length - 1; r >= 0; r--) {
         if ((s.data[r] || []).some(v => v !== '' && v !== undefined)) return r + 1;
@@ -476,23 +481,158 @@ test('archive hides nothing server side but is flagged; list sorted by name', ()
   const list = call(env, 'customers.list', {}, t3).data;
   eq(list.map(c => c.name), list.map(c => c.name).slice().sort((a, b) => a.localeCompare(b)));
   ok(list.find(c => c.customer_id === custId).archived);
-  call(env, 'customers.save', { customer_id: custId, name: 'Gloria Hayes', archived: false }, t3);
+  const back = call(env, 'customers.save', { customer_id: custId, archived: false }, t3).data.customer;
+  eq(back.archived, false); eq(back.phone, '602-555-0142', 'fields not sent are kept'); eq(back.notes, 'Size L');
 });
 
 test('stats: issued invoices only; repeat = 2+ paid; has unpaid; total spent', () => {
   const base = { public_id: 'x', customer_id: custId, fulfillment: 'pickup', upfront_percent: 100, view_count: 0, discount_cents: 0, subtotal_cents: 0 };
   vm.runInContext('appendRows_', env.ctx)('Documents', [
-    Object.assign({}, base, { doc_id: 'D1', type: 'invoice', number: 'TR-1001', status: 'issued', stage: 'completed', total_cents: 27500, paid_cents: 27500, created_at: '2026-10-01T10:00:00-07:00' }),
-    Object.assign({}, base, { doc_id: 'D2', type: 'invoice', number: 'TR-1002', status: 'issued', stage: 'in_progress', total_cents: 34100, paid_cents: 34100, created_at: '2026-11-01T10:00:00-07:00' }),
-    Object.assign({}, base, { doc_id: 'D3', type: 'invoice', number: 'TR-1003', status: 'issued', stage: 'awaiting_payment', total_cents: 33500, paid_cents: 0, created_at: '2026-11-10T10:00:00-07:00' }),
-    Object.assign({}, base, { doc_id: 'D4', type: 'invoice', number: 'TR-1004', status: 'void', stage: 'cancelled', total_cents: 99900, paid_cents: 0, created_at: '2026-11-11T10:00:00-07:00' }),
-    Object.assign({}, base, { doc_id: 'D5', type: 'quote', number: 'Q-1001', status: 'sent', stage: '', total_cents: 40500, paid_cents: 0, created_at: '2026-11-12T10:00:00-07:00' })
+    Object.assign({}, base, { doc_id: 'D1', type: 'invoice', number: 'TR-0901', status: 'issued', stage: 'completed', total_cents: 27500, paid_cents: 27500, created_at: '2026-10-01T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D2', type: 'invoice', number: 'TR-0902', status: 'issued', stage: 'in_progress', total_cents: 34100, paid_cents: 34100, created_at: '2026-11-01T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D3', type: 'invoice', number: 'TR-0903', status: 'issued', stage: 'awaiting_payment', total_cents: 33500, paid_cents: 0, created_at: '2026-11-10T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D4', type: 'invoice', number: 'TR-0904', status: 'void', stage: 'cancelled', total_cents: 99900, paid_cents: 0, created_at: '2026-11-11T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D5', type: 'quote', number: 'Q-0901', status: 'sent', stage: '', total_cents: 40500, paid_cents: 0, created_at: '2026-11-12T10:00:00-07:00' })
   ]);
   const g = call(env, 'customers.get', { customer_id: custId }, t3).data;
   eq(g.customer.stats, { orders: 3, paid_orders: 2, total_spent_cents: 61600, last_order_at: '2026-11-10T10:00:00-07:00', repeat: true, has_unpaid: true });
-  eq(g.orders.map(o => o.number), ['Q-1001', 'TR-1004', 'TR-1003', 'TR-1002', 'TR-1001']);
+  eq(g.orders.map(o => o.number), ['Q-0901', 'TR-0904', 'TR-0903', 'TR-0902', 'TR-0901']);
   ok(!('internal_notes' in g.orders[0]), 'order summaries are trimmed');
   eq(call(env, 'customers.get', { customer_id: 'C_nope' }, t3).error.code, 'NOT_FOUND');
+});
+
+/* ---------------- milestone 4: documents ---------------- */
+
+const t4 = tok();
+const std = () => {
+  const pk = table('Packages').find(p => p.name === 'Standard');
+  return { pk, lines: table('TemplateLines').filter(l => l.package_id === pk.package_id).map(l => ({ label: l.label, amount_cents: l.amount_cents, kind: l.kind })) };
+};
+const docPayload = (over) => {
+  const s = std();
+  return Object.assign({
+    type: 'invoice', customer_id: custId, fulfillment: 'pickup',
+    items: [{ product_id: s.pk.product_id, package_id: s.pk.package_id, title: 'Custom Bomber Jacket: Standard', qty: 1,
+      details: { style: 'womens', spots: [{ key: 'back', patch_no: '30' }] }, lines: s.lines }]
+  }, over || {});
+};
+// The earlier "Standard" test added a $5 line; put the seeded $275 lines back for these tests.
+(() => {
+  const s = std();
+  const keep = s.lines.filter(l => l.label !== 'Test line' && l.label !== 'All in');
+  call(env, 'catalog.saveTemplateLines', { package_id: s.pk.package_id, lines: keep }, t4);
+})();
+
+let inv;
+test('docs.save creates an invoice with TR-1001, draft, awaiting payment, server totals (acceptance 1)', () => {
+  const r = call(env, 'docs.save', docPayload(), t4);
+  eq(r.ok, true, JSON.stringify(r.error)); inv = r.data;
+  eq(inv.doc.number, 'TR-1001'); eq(inv.doc.status, 'draft'); eq(inv.doc.stage, 'awaiting_payment');
+  eq(inv.doc.subtotal_cents, 27500); eq(inv.doc.total_cents, 27500); eq(inv.doc.upfront_percent, 100);
+  ok(inv.doc.public_id.length >= 24, 'public id');
+  eq(inv.items.length, 1); eq(inv.items[0].lines.length, 7); eq(inv.items[0].details.style, 'womens');
+  eq(inv.customer.customer_id, custId);
+  eq(inv.log.map(l => l.action), ['created']);
+  eq(inv.doc.flags.not_sent, true); eq(inv.doc.amount_due_cents, 27500); eq(inv.doc.payment_status, 'unpaid');
+});
+
+test('totals ignore what the app claims: qty 2 = $550, discount applied, never below 0 (acceptance 8)', () => {
+  const r = call(env, 'docs.save', docPayload({ doc_id: inv.doc.doc_id, subtotal_cents: 1, total_cents: 1,
+    items: [Object.assign({}, inv.items[0], { qty: 2 })], discount_cents: 5000, discount_label: 'Friend' }), t4);
+  eq(r.data.doc.subtotal_cents, 55000); eq(r.data.doc.total_cents, 50000); eq(r.data.doc.number, 'TR-1001', 'number kept');
+  const r2 = call(env, 'docs.save', docPayload({ doc_id: inv.doc.doc_id, discount_cents: 999999 }), t4);
+  eq(r2.data.doc.total_cents, 0);
+});
+
+test('editing keeps item and line ids the app sends, and replaces the old rows', () => {
+  const cur = call(env, 'docs.get', { doc_id: inv.doc.doc_id }, t4).data;
+  const item = cur.items[0];
+  const lines = item.lines.slice(0, 6).concat([{ line_id: 'L_left_sleeve1', label: 'Left sleeve surcharge', amount_cents: 1000, kind: 'addon', addon_id: 'ADD_x' }]);
+  const r = call(env, 'docs.save', docPayload({ doc_id: inv.doc.doc_id, items: [Object.assign({}, item, { lines })] }), t4);
+  eq(r.data.items[0].item_id, item.item_id);
+  eq(r.data.items[0].lines.map(l => l.line_id).slice(0, 6), item.lines.slice(0, 6).map(l => l.line_id));
+  eq(r.data.items[0].lines[6].line_id, 'L_left_sleeve1');
+  eq(table('DocLines').filter(l => l.doc_id === inv.doc.doc_id).length, 7);
+  eq(table('DocItems').filter(l => l.doc_id === inv.doc.doc_id).length, 1);
+  eq(r.data.doc.total_cents, 27800 + 1000); // the 6 base lines ($278) + left sleeve $10
+});
+
+test('bad ids from the app are replaced; duplicate ids are not reused', () => {
+  const s = std();
+  const r = call(env, 'docs.save', docPayload({ doc_id: inv.doc.doc_id, items: [
+    { item_id: 'x', product_id: s.pk.product_id, package_id: s.pk.package_id, title: 'A', qty: 1, lines: [{ line_id: 'dup_1', label: 'a', amount_cents: 1, kind: 'custom' }] },
+    { item_id: '<script>', product_id: s.pk.product_id, package_id: s.pk.package_id, title: 'B', qty: 1, lines: [{ line_id: 'dup_1', label: 'b', amount_cents: 2, kind: 'custom' }] }
+  ] }), t4);
+  const ids = r.data.items.map(i => i.item_id); ok(ids[0] !== 'x' && ids[1] !== '<script>');
+  ok(r.data.items[1].lines[0].line_id !== 'dup_1', 'second duplicate replaced');
+});
+
+test('quote gets Q-1001; numbers increase and are never reused (5.7)', () => {
+  const q1 = call(env, 'docs.save', docPayload({ type: 'quote' }), t4).data;
+  eq(q1.doc.number, 'Q-1001'); eq(q1.doc.stage, '');
+  const i2 = call(env, 'docs.save', docPayload(), t4).data; eq(i2.doc.number, 'TR-1002');
+  const q2 = call(env, 'docs.save', docPayload({ type: 'quote' }), t4).data; eq(q2.doc.number, 'Q-1002');
+  const s = vm.runInContext('getSettings_()', env.ctx); eq(s.next_quote_no, 1003); eq(s.next_order_no, 1003);
+});
+
+test('docs.save validation: customer, qty, amounts, kinds, upfront, date', () => {
+  const bad = (over, code, msg) => { const r = call(env, 'docs.save', docPayload(over), t4); eq(r.ok, false); eq(r.error.code, code || 'VALIDATION'); if (msg) eq(r.error.message, msg); };
+  bad({ customer_id: '' }, 'VALIDATION', 'Please choose a customer.');
+  bad({ customer_id: 'C_nobody' }, 'VALIDATION', 'Please choose a customer.');
+  bad({ type: 'receipt' });
+  bad({ upfront_percent: 0 }); bad({ upfront_percent: 50.5 });
+  bad({ est_ready_date: 'next week' });
+  bad({ discount_cents: -100 });
+  const s = std();
+  bad({ items: [{ product_id: s.pk.product_id, package_id: s.pk.package_id, title: 'x', qty: 0, lines: [] }] }, 'VALIDATION', 'Item 1 quantity must be from 1 to 99.');
+  bad({ items: [{ title: 'x', qty: 1, lines: [{ label: 'a', amount_cents: 1.5 }] }] }, 'VALIDATION', 'Item 1, line 1 amount must be an amount up to $100,000.');
+  bad({ items: [{ title: 'x', qty: 1, lines: [{ label: 'a', amount_cents: 1, kind: 'magic' }] }] });
+  bad({ items: [{ title: '', qty: 1, lines: [] }] }, 'VALIDATION', 'Item 1 title is required.');
+  eq(call(env, 'docs.save', docPayload({ doc_id: 'D_nope' }), t4).error.code, 'NOT_FOUND');
+});
+
+test('upfront 50% of $341.01 is due now as $170.51, rounded up (acceptance 10)', () => {
+  const r = call(env, 'docs.save', docPayload({ upfront_percent: 50, items: [{ title: 'x', qty: 1, lines: [{ label: 'a', amount_cents: 34101, kind: 'custom' }] }] }), t4);
+  eq(r.data.doc.total_cents, 34101); eq(r.data.doc.amount_due_cents, 17051);
+});
+
+test('docs.get by number; void and converted documents cannot be edited', () => {
+  eq(call(env, 'docs.get', { number: 'tr-1001' }, t4).data.doc.doc_id, inv.doc.doc_id);
+  eq(call(env, 'docs.get', { number: 'TR-9999' }, t4).error.code, 'NOT_FOUND');
+  const d = table('Documents').find(x => x.number === 'TR-1002');
+  d.status = 'void'; vm.runInContext('updateRow_', env.ctx)('Documents', d);
+  eq(call(env, 'docs.save', docPayload({ doc_id: d.doc_id }), t4).error.message, 'This order is void and can\'t be changed.');
+});
+
+test('docs.list: filters, search by number/name/phone, newest first, no notes', () => {
+  const all = call(env, 'docs.list', {}, t4).data;
+  ok(all.total >= 6); ok(!('internal_notes' in all.rows[0]));
+  const quotes = call(env, 'docs.list', { filter: 'quotes' }, t4).data.rows; ok(quotes.length >= 2 && quotes.every(r => r.type === 'quote'));
+  const unpaid = call(env, 'docs.list', { filter: 'unpaid' }, t4).data.rows; ok(unpaid.every(r => r.type === 'invoice' && r.status !== 'void'));
+  eq(call(env, 'docs.list', { q: 'tr-1001' }, t4).data.rows.filter(r => r.number === 'TR-1001').length, 1);
+  ok(call(env, 'docs.list', { q: 'gloria' }, t4).data.total >= 1);
+  ok(call(env, 'docs.list', { q: '555-0142' }, t4).data.total >= 1);
+  eq(call(env, 'docs.list', { q: 'zzzz' }, t4).data.total, 0);
+  const page = call(env, 'docs.list', { limit: 2, offset: 0 }, t4).data; eq(page.rows.length, 2);
+});
+
+test('flags: overdue after 7 days unpaid, ready 3+ days, expired quote, expiring soon (acceptance 12, 13, 17)', () => {
+  const flags = vm.runInContext('docFlags_', env.ctx);
+  const st = vm.runInContext('effectiveStatus_', env.ctx);
+  const settings = { unpaid_flag_days: 7, ready_flag_days: 3 };
+  const now = Date.now(), day = 86400000, iso = (ms) => new Date(ms).toISOString();
+  const base = { type: 'invoice', status: 'issued', stage: 'awaiting_payment', total_cents: 34100, paid_cents: 0, upfront_percent: 100 };
+  eq(flags(Object.assign({}, base, { sent_at: iso(now - 8 * day) }), 1, settings, now).overdue, true);
+  eq(flags(Object.assign({}, base, { sent_at: iso(now - 6 * day) }), 1, settings, now).overdue, false);
+  eq(flags(Object.assign({}, base, { sent_at: iso(now - 8 * day), paid_cents: 34100 }), 1, settings, now).overdue, false);
+  const ready = flags(Object.assign({}, base, { stage: 'ready', paid_cents: 34100, ready_at: iso(now - 4 * day) }), 1, settings, now);
+  eq(ready.ready_late, true); eq(ready.balance_overdue, false);
+  eq(flags(Object.assign({}, base, { stage: 'ready', ready_at: iso(now - 2 * day) }), 1, settings, now).ready_late, false);
+  const q = { type: 'quote', status: 'sent', total_cents: 1, sent_at: iso(now - 31 * day), expires_at: iso(now - day) };
+  eq(st(q, now), 'expired'); eq(flags(q, 1, settings, now).quote_waiting, false);
+  const q2 = Object.assign({}, q, { expires_at: iso(now + 3 * day) });
+  eq(flags(q2, 1, settings, now).quote_waiting, true); eq(flags(q2, 1, settings, now).quote_expiring, true);
+  eq(flags({ type: 'invoice', status: 'draft', total_cents: 0 }, 0, settings, now).not_sent, false, 'empty draft is not "not sent"');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

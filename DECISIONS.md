@@ -52,3 +52,22 @@ Choices made where SPEC.md left room, newest milestone last.
 16. **Text that starts with "=" is stored as text**, never as a Sheets formula (a hidden leading apostrophe). This matters most for anything customers type later (approval names, decline notes).
 17. **Screens added:** `product-edit.js`, `package-edit.js`, `customer-edit.js` (besides the spec's `products.js`, `patches.js`, `customers.js`, `customer-detail.js`).
 18. **Standard numbers in headings.** Cormorant Garamond draws old-style numbers by default (0 looks like o), so headings and amounts use standard numbers.
+
+## Milestone 4: order editor
+
+1. **New invoices start as "draft" with stage "awaiting payment".** They become "issued" when sent or marked sent (milestone 6). Quotes start as "draft". Numbers are given on the first save (SPEC 5.7), so a draft already has its TR- or Q- number.
+2. **A customer and at least one item are required to save.** The order editor says so in plain words; the server checks the customer too.
+3. **Items and lines are rewritten on each save.** The app gives every item and line an id that the server keeps, so checklists (milestone 6) and the link between an extra patch spot and its price line survive edits. Invalid or repeated ids from the app are replaced.
+4. **The server recomputes all totals** from the lines and ignores any totals the app sends. `js/rules.js` and `apps-script/Rules.gs` hold the same rules; both are tested (browser test page and Node tests).
+5. **"Standard package" for the tier warning means an item with no upgrade line.** So the warning goes away as soon as Terri changes to Premium or adds an upgrade line by hand, whatever the package is called.
+6. **"Change package" swaps only the package lines** (normal fees, savings, upgrades). Add-ons and lines Terri added stay. The item title follows the package if Terri hadn't renamed it.
+7. **Extra patch spots link to their price line.** Removing an extra spot removes the add-on line it created. Extra spot labels (Extra A, B, C...) follow the order of the spots. Picking "Your own patch" as the price ticks "Own patch" on that spot.
+8. **Left sleeve:** switching the sleeve to Left adds the surcharge once; Right removes it. If Terri deletes the line by hand it stays deleted until the sleeve is switched again.
+9. **Line amounts are kept as typed while editing** and checked on save ("Item 1, line 3 needs an amount"), so a half-typed number never jumps around.
+10. **Local draft:** saved to the browser 0.4 s after each change, per order (or per new quote / new invoice). Opening the editor again offers "Restore them / Discard". When the order was saved again elsewhere since the draft, the message says so. The draft is deleted after a successful save.
+11. **"Save & Send" waits for milestone 6**, when sending exists. The editor has one Save button for now.
+12. **Order page is basic for now** (`order-detail.js`): status, customer, items, details summary, totals, notes and Edit. Sending, payments, checklist, activity and photos arrive in milestone 6 and 7.
+13. **Orders list filters:** "Unpaid" includes draft and issued invoices that are not fully paid (not void or cancelled), so a just-made invoice is easy to find. "Quotes" hides quotes that became invoices.
+14. **Patch spots without a patch, own-patch tick or notes are left out of the order summary**, to keep it short.
+15. **Customer edits keep fields that are not sent** (found while testing: archiving with only the id would have blanked the phone). The app always sends every field, so this is a safety net.
+16. **New Apps Script files:** `Rules.gs` (server copy of the rules) and `Documents.gs`. The milestone 2 "Coming soon" screen was removed.

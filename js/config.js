@@ -5,7 +5,7 @@
 export const API_URL = 'https://script.google.com/macros/s/AKfycbwxqF9osxEGizJrbD5aJM0SlIiuNNfy2dJT24C-S4MsihdkQcisEyDVaSnkUmqKotKRZA/exec';
 
 // Bump this with each release. It is shown in Settings and names the offline cache.
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 
 // Path of the site on its host: '/tr-orders/' on GitHub Pages, '/' on a custom domain.
 // Only used where a full link is needed; the app itself uses relative paths everywhere.

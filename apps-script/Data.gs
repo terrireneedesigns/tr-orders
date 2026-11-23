@@ -260,6 +260,28 @@ function rewriteTable_(name, objs) {
   }
 }
 
+/**
+ * Delete the rows of `name` whose `col` equals `value` (used to rewrite one order's items
+ * and lines). Deletes from the bottom up, in contiguous blocks.
+ */
+function deleteRowsWhere_(name, col, value) {
+  var sh = sheet_(name);
+  var rows = readTable_(name).filter(function (r) { return r[col] === value; })
+    .map(function (r) { return r._row; }).sort(function (a, b) { return b - a; });
+  if (!rows.length) return 0;
+  // Sheets refuses to delete every non-frozen row, so keep a spare row at the end.
+  if (sh.getMaxRows() - rows.length <= 1) sh.insertRowsAfter(sh.getMaxRows(), 1);
+  var i = 0;
+  while (i < rows.length) {
+    var end = rows[i];
+    var start = end;
+    while (i + 1 < rows.length && rows[i + 1] === start - 1) { i++; start--; }
+    sh.deleteRows(start, end - start + 1);
+    i++;
+  }
+  return rows.length;
+}
+
 function findBy_(rows, col, value) {
   for (var i = 0; i < rows.length; i++) if (rows[i][col] === value) return rows[i];
   return null;

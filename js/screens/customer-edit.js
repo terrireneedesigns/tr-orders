@@ -41,9 +41,12 @@ export default {
         if (!name.value.trim()) throw new ApiError('VALIDATION', 'Please type the customer\'s name.');
         const res = await call('customers.save', payload(false));
         if (res.saved) done(res.customer);
-        else askUseExisting(res.duplicates, async () => {
-          const forced = await call('customers.save', payload(true));
-          done(forced.customer);
+        else askUseExisting(res.duplicates, {
+          onUse: (d) => navigate('/customers/' + encodeURIComponent(d.customer_id), { replace: true }),
+          onSaveNew: async () => {
+            const forced = await call('customers.save', payload(true));
+            done(forced.customer);
+          }
         });
       });
     } },
@@ -59,11 +62,14 @@ export default {
   }
 };
 
-/** "Use existing customer?" sheet. `saveNew` saves anyway as a separate customer. */
-function askUseExisting(duplicates, saveNew) {
+/**
+ * "Use existing customer?" sheet (SPEC 5.9). `onUse(customer)` runs when one is chosen;
+ * `onSaveNew()` saves anyway as a separate customer. Also used by the order editor.
+ */
+export function askUseExisting(duplicates, { onUse, onSaveNew }) {
   sheet((close) => {
     const newBtn = h('button', { class: 'btn btn-secondary btn-block', type: 'button' }, 'No, save as a new customer');
-    newBtn.addEventListener('click', () => withBusy(newBtn, 'Saving…', async () => { await saveNew(); close(); }));
+    newBtn.addEventListener('click', () => withBusy(newBtn, 'Saving…', async () => { await onSaveNew(); close(); }));
     return [
       h('h2', null, 'Use existing customer?'),
       h('p', null, duplicates.length === 1
@@ -75,7 +81,7 @@ function askUseExisting(duplicates, saveNew) {
         h('button', { class: 'btn btn-block', type: 'button', style: { marginTop: '10px' }, onclick: () => {
           upsertCustomer(d);
           close();
-          navigate('/customers/' + encodeURIComponent(d.customer_id), { replace: true });
+          onUse(d);
         } }, 'Use ' + d.name)))),
       h('div', { class: 'actions' }, newBtn,
         h('button', { class: 'btn-link', type: 'button', onclick: () => close() }, 'Cancel'))

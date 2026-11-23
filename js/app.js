@@ -15,7 +15,8 @@ import packageEdit from './screens/package-edit.js';
 import customerDetail from './screens/customer-detail.js';
 import customerEdit from './screens/customer-edit.js';
 import settings from './screens/settings.js';
-import comingSoon from './screens/coming-soon.js';
+import orderEdit from './screens/order-edit.js';
+import orderDetail from './screens/order-detail.js';
 
 const root = document.getElementById('app');
 
@@ -112,7 +113,9 @@ route('/catalog/products/:id', (p) => mount(productEdit, p));
 route('/catalog/packages/new', (p) => mount(packageEdit, p));
 route('/catalog/packages/:id', (p) => mount(packageEdit, p));
 route('/settings', () => mount(settings));
-route('/new/:type', (p) => mount(comingSoon, p));
+route('/new/:type', (p) => mount(orderEdit, p));
+route('/orders/:number', (p) => mount(orderDetail, p));
+route('/orders/:number/edit', (p) => mount(orderEdit, p));
 fallback(() => navigate('/home', { replace: true }));
 
 /* ---------- sign in / start ---------- */

@@ -42,18 +42,23 @@ function findDuplicates_(rows, phone, email, exceptId) {
  * "Use existing customer?".
  */
 function saveCustomer_(p) {
-  var name = vStr_(p.name, 'Name', 100, true);
-  var phone = cleanPhone_(p.phone);
-  var email = cleanEmail_(p.email);
-  var notes = vStr_(p.notes, 'Notes', 5000);
+  // When editing, a field that isn't sent keeps its current value (so archiving can't wipe a phone).
+  var editing = !!p.customer_id;
+  var name = editing && p.name === undefined ? undefined : vStr_(p.name, 'Name', 100, true);
+  var phone = editing && p.phone === undefined ? undefined : cleanPhone_(p.phone);
+  var email = editing && p.email === undefined ? undefined : cleanEmail_(p.email);
+  var notes = editing && p.notes === undefined ? undefined : vStr_(p.notes, 'Notes', 5000);
   return withLock_(function () {
     var rows = readTable_('Customers');
     var now = nowIso_();
     var row;
-    if (p.customer_id) {
+    if (editing) {
       row = findBy_(rows, 'customer_id', vId_(p.customer_id, 'Customer'));
       if (!row) throw appError('NOT_FOUND', 'That customer no longer exists. Pull down to refresh.');
-      row.name = name; row.phone = phone; row.email = email; row.notes = notes;
+      if (name !== undefined) row.name = name;
+      if (phone !== undefined) row.phone = phone;
+      if (email !== undefined) row.email = email;
+      if (notes !== undefined) row.notes = notes;
       if (p.archived !== undefined) row.archived = vBool_(p.archived);
       row.updated_at = now;
       updateRow_('Customers', row);
