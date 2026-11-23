@@ -1,0 +1,88 @@
+/* admin.css: the TR Orders admin app layout (header, tab bar, screens, login). */
+
+html, body { height: 100%; }
+body { overscroll-behavior-y: none; }
+
+#app { min-height: 100%; }
+
+/* ---------- header ---------- */
+
+.app-header {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--ink); color: var(--cream);
+  padding: calc(var(--safe-top) + 8px) calc(var(--gap) + var(--safe-right)) 8px calc(var(--gap) + var(--safe-left));
+  display: flex; align-items: center; gap: 12px; min-height: 60px;
+}
+.app-header img { width: 52px; height: 40px; object-fit: contain; flex: none; }
+.app-header .title {
+  font-family: var(--font-head); font-weight: 600; font-size: 26px; line-height: 1.1;
+  margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.app-header .back {
+  min-width: var(--tap); min-height: var(--tap); margin-left: -8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 0; color: var(--gold); font-size: 28px; cursor: pointer;
+}
+
+/* ---------- main area ---------- */
+
+.app-main {
+  padding: var(--gap) calc(var(--gap) + var(--safe-right)) calc(96px + var(--safe-bottom)) calc(var(--gap) + var(--safe-left));
+  max-width: 720px; margin: 0 auto;
+}
+.section { margin-top: 28px; }
+.section:first-child { margin-top: 0; }
+
+.pull-indicator {
+  height: 0; overflow: hidden; text-align: center; color: var(--muted); font-size: 15px;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+
+/* ---------- tab bar ---------- */
+
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: var(--ink);
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  border-top: 1px solid #3a332d;
+}
+.tabbar a {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 64px; padding: 6px 2px;
+  color: rgba(249, 246, 240, 0.78); text-decoration: none;
+  font: 500 13px/1.2 var(--font-body);
+}
+.tabbar a svg { width: 26px; height: 26px; }
+.tabbar a[aria-current="page"] { color: var(--gold); }
+
+/* ---------- home ---------- */
+
+.home-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.snapshot { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.snapshot .card { margin: 0; }
+.snapshot .num { font-family: var(--font-head); font-size: 30px; font-weight: 600; line-height: 1.1; }
+
+/* ---------- login ---------- */
+
+.login {
+  min-height: 100vh; min-height: 100dvh;
+  background: var(--ink); color: var(--cream);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);
+}
+.login-inner { width: 100%; max-width: 360px; text-align: center; }
+.login img { width: 220px; height: auto; aspect-ratio: 916 / 765; margin: 0 auto 8px; display: block; }
+.login h1 { color: var(--cream); margin-bottom: 24px; }
+.login .field > span { color: var(--cream); text-align: left; }
+.login .input { text-align: center; font-size: 24px; letter-spacing: 0.3em; }
+.login .error {
+  background: var(--cream); color: var(--oxblood); border-radius: var(--radius);
+  padding: 10px 14px; margin-bottom: var(--gap); font-weight: 500; text-align: left;
+}
+.login .error:empty { display: none; }
+
+/* ---------- boot / full-page message ---------- */
+
+.boot { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--ink); }
+.boot img { width: 120px; height: auto; opacity: 0.9; }

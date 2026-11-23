@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TR Orders API Test</title>
+<style>
+  :root { --ink:#201C19; --cream:#F9F6F0; --panel:#F0ECE2; --line:#DDD6C8; --muted:#6B6359; --oxblood:#6E1A1E; --ok:#2F6B3A; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--cream); color: var(--ink); font: 18px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  p.hint { color: var(--muted); margin: 0 0 16px; font-size: 16px; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  input { width: 100%; height: 52px; padding: 0 12px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+  button { min-height: 52px; padding: 0 18px; font-size: 16px; border-radius: 8px; border: 1px solid var(--ink); background: var(--ink); color: var(--cream); cursor: pointer; }
+  button.secondary { background: transparent; color: var(--ink); }
+  #status { font-weight: 600; min-height: 1.5em; }
+  #status.good { color: var(--ok); } #status.bad { color: var(--oxblood); }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; max-height: 60vh; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TR Orders API test</h1>
+  <p class="hint">Milestone 1 check. Paste the Web App URL (ends in <code>/exec</code>), then try Ping, Sign in and Bootstrap.</p>
+
+  <label for="url">Web App URL</label>
+  <input id="url" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+
+  <label for="passcode">Passcode</label>
+  <input id="passcode" type="password" inputmode="numeric" autocomplete="off">
+
+  <div class="row">
+    <button id="ping" class="secondary">Ping</button>
+    <button id="login">Sign in</button>
+    <button id="bootstrap">Bootstrap</button>
+    <button id="logout" class="secondary">Sign out</button>
+  </div>
+
+  <div id="status" role="status"></div>
+  <pre id="out">(results show here)</pre>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  // Values are kept in memory first, so the page works even when the browser blocks
+  // localStorage (Safari does this for pages opened as file://). localStorage only
+  // remembers them between visits when it is allowed.
+  const memory = {};
+  const store = {
+    get(k) {
+      if (k in memory) return memory[k];
+      try { return localStorage.getItem(k) || ''; } catch (e) { return ''; }
+    },
+    set(k, v) {
+      memory[k] = v || '';
+      try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {}
+    }
+  };
+  $('url').value = store.get('tr_test_url');
+  $('url').addEventListener('change', () => store.set('tr_test_url', $('url').value.trim()));
+
+  function show(ok, text, obj) {
+    $('status').textContent = text;
+    $('status').className = ok ? 'good' : 'bad';
+    $('out').textContent = JSON.stringify(obj, null, 2);
+  }
+
+  // text/plain avoids the CORS preflight that Apps Script cannot answer.
+  async function api(action, payload) {
+    const url = $('url').value.trim();
+    if (!url) { show(false, 'Paste the Web App URL first.', {}); return null; }
+    store.set('tr_test_url', url);
+    const started = performance.now();
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, token: store.get('tr_test_token'), payload: payload || {} })
+      });
+      const json = await res.json();
+      const ms = Math.round(performance.now() - started);
+      if (json.ok) show(true, `${action}: OK (${ms} ms)`, json.data);
+      else show(false, `${action}: ${json.error.message} [${json.error.code}]`, json);
+      return json;
+    } catch (err) {
+      show(false, `${action}: could not reach the API. Check the URL and that the deployment allows "Anyone".`, { error: String(err) });
+      return null;
+    }
+  }
+
+  $('ping').onclick = () => api('ping');
+  $('login').onclick = async () => {
+    const r = await api('auth.login', { passcode: $('passcode').value, label: 'API test page' });
+    if (r && r.ok) { store.set('tr_test_token', r.data.token); $('passcode').value = ''; }
+  };
+  $('bootstrap').onclick = async () => {
+    const r = await api('bootstrap');
+    if (r && r.ok) {
+      const d = r.data;
+      $('status').textContent += ` · ${d.products.length} products, ${d.packages.length} packages, ` +
+        `${d.templateLines.length} lines, ${d.addOns.length} add-ons, ${d.patches.length} patches, ${d.customers.length} customers`;
+    }
+  };
+  $('logout').onclick = async () => {
+    await api('auth.logout');
+    store.set('tr_test_token', '');
+  };
+</script>
+</body>
+</html>
