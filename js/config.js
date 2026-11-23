@@ -2,7 +2,7 @@
 // No secrets here: the Web App URL is public by design (security is in the back end).
 
 // Paste the Apps Script Web App URL (ends in /exec). See README, "Deploy the Web App".
-export const API_URL = '';
+export const API_URL = 'https://script.google.com/macros/s/AKfycbwxqF9osxEGizJrbD5aJM0SlIiuNNfy2dJT24C-S4MsihdkQcisEyDVaSnkUmqKotKRZA/exec';
 
 // Bump this with each release. It is shown in Settings and names the offline cache.
 export const APP_VERSION = '0.2.0';
