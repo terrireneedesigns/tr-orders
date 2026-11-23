@@ -2,7 +2,7 @@
 // sign out, sign out all devices, app version.
 import { APP_VERSION } from '../config.js';
 import { call, clearToken } from '../api.js';
-import { h, confirmDialog, toast } from '../ui.js';
+import { h, confirmDialog, toast, setChildren } from '../ui.js';
 import { store, loadBootstrap } from '../store.js';
 import { signedOut } from '../app.js';
 
@@ -12,7 +12,7 @@ export default {
   render(main) {
     const draw = () => {
       const s = store.data.settings;
-      main.replaceChildren(
+      setChildren(main, 
         h('section', { class: 'section' },
           h('h2', { class: 'label' }, 'Business'),
           h('ul', { class: 'list' },

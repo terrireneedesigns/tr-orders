@@ -1,11 +1,11 @@
 // screens/orders.js: Orders tab. The list, filters and search arrive with the order editor.
-import { h } from '../ui.js';
+import { h, setChildren } from '../ui.js';
 
 export default {
   title: 'Orders',
   tab: 'orders',
   render(main) {
-    main.replaceChildren(
+    setChildren(main, 
       h('div', { class: 'card empty' },
         h('h2', null, 'No orders yet'),
         h('p', null, 'Quotes and invoices will be listed here.')),

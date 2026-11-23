@@ -23,6 +23,13 @@ export function h(tag, props, ...children) {
   return el;
 }
 
+/** Replace an element's children. Skips null/false like h() (the DOM would print "null"). */
+export function setChildren(el, ...children) {
+  el.replaceChildren();
+  appendAll(el, children);
+  return el;
+}
+
 function appendAll(el, children) {
   for (const c of children) {
     if (c === null || c === undefined || c === false) continue;
@@ -166,4 +173,112 @@ export function formatDateTime(iso) {
   return d.toLocaleString('en-US', {
     timeZone: 'America/Phoenix', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
   });
+}
+
+/* ---------- form helpers ---------- */
+
+let fieldSeq = 0;
+
+/** Labelled field: field('Name', input, 'optional hint'). Links the label to the control. */
+export function field(label, control, hint) {
+  if (!control.id) control.id = 'f' + (++fieldSeq);
+  const hintEl = hint ? h('p', { class: 'hint', id: control.id + '-hint' }, hint) : null;
+  if (hintEl) control.setAttribute('aria-describedby', hintEl.id);
+  return h('div', { class: 'field' }, h('label', { for: control.id }, label), control, hintEl);
+}
+
+export function textInput(value = '', props = {}) {
+  return h('input', Object.assign({ class: 'input', type: 'text', value: value ?? '' }, props));
+}
+
+export function textArea(value = '', props = {}) {
+  const t = h('textarea', Object.assign({ class: 'input', rows: '4' }, props));
+  t.value = value ?? '';
+  return t;
+}
+
+/** Money box: shows dollars, `inputmode=decimal` for the number keypad with a dot. */
+export function moneyInput(text = '', props = {}) {
+  return h('input', Object.assign({
+    class: 'input money', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: text, placeholder: '0.00'
+  }, props));
+}
+
+/** <select> from [{ value, label }]. */
+export function selectInput(options, value, props = {}) {
+  const s = h('select', Object.assign({ class: 'input' }, props),
+    options.map((o) => h('option', { value: o.value }, o.label)));
+  s.value = value;
+  return s;
+}
+
+/** Big on/off switch row. Returns the row; read row.input.checked. */
+export function toggleRow(label, checked, hint) {
+  const input = h('input', { type: 'checkbox', role: 'switch' });
+  input.checked = !!checked;
+  const row = h('label', { class: 'toggle-row' },
+    h('span', { class: 'grow' }, h('span', null, label), hint ? h('span', { class: 'hint' }, hint) : null),
+    input, h('span', { class: 'switch', 'aria-hidden': 'true' }));
+  row.input = input;
+  return row;
+}
+
+/** Segmented control. options: [{ value, label }]. Calls onChange(value). */
+export function segmented(options, value, onChange, ariaLabel) {
+  const wrap = h('div', { class: 'segmented', role: 'group', 'aria-label': ariaLabel || '' });
+  const buttons = options.map((o) => h('button', {
+    type: 'button', 'aria-pressed': String(o.value === value),
+    onclick: () => {
+      buttons.forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      btn(o.value).setAttribute('aria-pressed', 'true');
+      onChange(o.value);
+    }
+  }, o.label));
+  const btn = (v) => buttons[options.findIndex((o) => o.value === v)];
+  wrap.append(...buttons);
+  return wrap;
+}
+
+/** Search box that calls onInput(text) as you type. */
+export function searchBox(placeholder, onInput, value = '') {
+  const input = h('input', {
+    class: 'input search', type: 'search', placeholder, value, 'aria-label': placeholder,
+    autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false',
+    oninput: () => onInput(input.value)
+  });
+  return input;
+}
+
+/** Small square button with a symbol and an accessible name. */
+export function iconButton(label, symbol, onclick, extra = '') {
+  return h('button', { type: 'button', class: 'icon-btn ' + extra, 'aria-label': label, title: label, onclick }, symbol);
+}
+
+/**
+ * Run an async action with a button showing a busy label, so it can't be tapped twice.
+ * Errors are shown as a toast. Resolves with the action's result, or undefined on error.
+ */
+export async function withBusy(button, busyText, fn) {
+  const old = button.textContent;
+  button.disabled = true;
+  button.textContent = busyText;
+  try {
+    return await fn();
+  } catch (err) {
+    showError(err);
+    return undefined;
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = old;
+    }
+  }
+}
+
+/** Formats an ISO date as "Nov 22, 2026". */
+export function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('en-US', { timeZone: 'America/Phoenix', month: 'short', day: 'numeric', year: 'numeric' });
 }

@@ -86,3 +86,41 @@ body { overscroll-behavior-y: none; }
 
 .boot { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--ink); }
 .boot img { width: 120px; height: auto; opacity: 0.9; }
+
+/* ---------- forms and editors (milestone 3) ---------- */
+
+.form-actions {
+  position: sticky; z-index: 10;
+  bottom: calc(64px + var(--safe-bottom));
+  margin: 24px calc(-1 * var(--gap)) 0; padding: 12px var(--gap);
+  background: linear-gradient(to bottom, rgba(249, 246, 240, 0.85), var(--cream) 30%);
+  display: grid; gap: 10px;
+}
+.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: var(--gap); }
+.toolbar .input { flex: 1; }
+.toolbar .btn { flex: none; }
+.row-actions { display: flex; gap: 6px; flex: none; }
+.list-row.button-row { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.list-row .title-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.list-row .amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.muted-row { opacity: 0.6; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.line-editor { display: grid; gap: 12px; }
+.line-card { background: var(--panel); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; }
+.line-card .line-bottom { display: flex; gap: 8px; align-items: center; }
+.line-card .line-bottom .money { flex: 0 1 140px; min-width: 96px; }
+.line-card .line-bottom .grow { flex: 1; }
+.line-card .dollar { font-weight: 500; color: var(--muted); margin-right: -2px; }
+.line-total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 4px 0; border-top: 2px solid var(--ink); margin-top: 4px; }
+.line-total .amount { font-family: var(--font-head); font-size: 28px; font-weight: 600; }
+
+.contact-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stats .card { margin: 0; padding: 12px; }
+.stats .num { font-family: var(--font-head); font-size: 24px; font-weight: 600; line-height: 1.15; }
+.notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.badge-repeat { background: transparent; color: var(--ok); border-color: var(--ok); }
+.badge-premium { background: var(--ink); color: var(--gold); }
+.sheet h2 { margin-bottom: 16px; }
+.group-label { margin-top: 24px; }

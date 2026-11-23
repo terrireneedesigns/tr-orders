@@ -7,7 +7,7 @@
  *   { "ok": true, "data": ... }  or  { "ok": false, "error": { "code", "message" } }
  */
 
-var API_VERSION = '0.1.0';
+var API_VERSION = '0.3.0';
 var SESSION_DAYS = 180;
 var LOGIN_MAX_FAILS = 10;
 var LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -22,6 +22,15 @@ function routes_() {
     'auth.logoutAll': { auth: true, fn: authLogoutAll_ },
     'auth.changePasscode': { auth: true, fn: authChangePasscode_ },
     'bootstrap': { auth: true, fn: bootstrap_ },
+    'customers.save': { auth: true, fn: saveCustomer_ },
+    'customers.get': { auth: true, fn: getCustomer_ },
+    'customers.list': { auth: true, fn: listCustomers_ },
+    'catalog.saveProduct': { auth: true, fn: saveProduct_ },
+    'catalog.savePackage': { auth: true, fn: savePackage_ },
+    'catalog.saveTemplateLines': { auth: true, fn: saveTemplateLines_ },
+    'catalog.saveAddOn': { auth: true, fn: saveAddOn_ },
+    'catalog.savePatch': { auth: true, fn: savePatch_ },
+    'catalog.reorder': { auth: true, fn: reorderCatalog_ },
     'backup.run': { auth: true, fn: runBackup_ }
   };
 }

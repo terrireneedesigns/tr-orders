@@ -31,3 +31,24 @@ Choices made where SPEC.md left room, newest milestone last.
 8. **Settings is read-only for now** (business info, Zelle, Google Sheet link, sign out, sign out all devices, version). Editing settings, terms, templates and the passcode comes with a later milestone.
 9. **The passcode field doesn't auto-focus on phones**, so the keyboard doesn't cover the logo when the app opens. It does on larger screens.
 10. **Local dev server** (`tests/dev-server.js`) serves the site at `/tr-orders/` like GitHub Pages, with a fake back end made from the real `.gs` code. Developer tool only.
+
+## Milestone 3: catalog and customers
+
+1. **Catalog has two sections, Products and Patches.** SPEC 6.9 says "three sub-tabs" but describes two; add-ons live inside each product (as the spec's Products section describes), so a third tab would be empty.
+2. **Package price lines are replaced as a set.** Template lines are a definition, not a record, so saving a package rewrites that package's lines (other packages untouched). This is the one place rows are removed from the Sheet. Orders keep their own copied lines, so old orders never change.
+3. **`catalog.savePackage` can also save the lines** (`lines` in the same call), so editing a package is one trip to the server. `catalog.saveTemplateLines` still exists on its own.
+4. **Added `catalog.reorder`** for the ↑ ↓ buttons on products, packages and add-ons (one call sets the whole order). The new order shows immediately and is saved in the background; if saving fails, the real order is reloaded.
+5. **Up/down buttons instead of drag to reorder.** Easier to tap accurately on a phone and works the same everywhere.
+6. **Savings lines must be negative.** The package editor refuses a positive "Package savings" amount with a clear message instead of silently flipping the sign.
+7. **New products get a "Custom" package automatically** (SPEC 4.4: every product has at least one).
+8. **Patch numbers can be changed.** Edits identify the patch by its old number; duplicate numbers are refused. "+ Add" suggests the next free number. Patch photos wait for milestone 7 (photo upload).
+9. **Hide instead of delete.** Products, packages, add-ons and patches have "Show in new orders" switches; customers can be archived and restored. Nothing is deleted from the UI.
+10. **Phone and email clean-up.** 10-digit US numbers are saved as `623-521-6235` whatever the typing style; other formats are kept as typed. Emails are saved in lowercase.
+11. **Duplicate check only when adding a customer.** Matches on the same phone digits (7+ digits, ignoring a leading 1) or the same email, including archived customers. Editing an existing customer never asks.
+12. **Customer stats count issued invoices only** (not quotes, drafts, voided or cancelled orders). Total spent is the sum paid on those invoices; "Has unpaid" means one of them is paid less than its total. Repeat customer = 2 or more fully paid invoices.
+13. **Customer list shows instantly from memory** and refreshes its badges in the background (`customers.list`).
+14. **Order history rows are not tappable yet**; the order detail screen comes in milestone 6.
+15. **Added `Customers.gs`** to the Apps Script project for the customer actions (not in the SPEC 3.4 file list).
+16. **Text that starts with "=" is stored as text**, never as a Sheets formula (a hidden leading apostrophe). This matters most for anything customers type later (approval names, decline notes).
+17. **Screens added:** `product-edit.js`, `package-edit.js`, `customer-edit.js` (besides the spec's `products.js`, `patches.js`, `customers.js`, `customer-detail.js`).
+18. **Standard numbers in headings.** Cormorant Garamond draws old-style numbers by default (0 looks like o), so headings and amounts use standard numbers.

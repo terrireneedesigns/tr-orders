@@ -1,7 +1,7 @@
 // app.js: starts the admin app: sign-in check, header, tab bar, routes, service worker.
 import { APP_VERSION } from './config.js';
 import { getToken, onAuthLost } from './api.js';
-import { route, fallback, start as startRouter, resolve, navigate } from './router.js';
+import { route, fallback, start as startRouter, resolve, navigate, back } from './router.js';
 import { store, loadBootstrap, clearStore } from './store.js';
 import { h, icon, enablePullToRefresh, showError } from './ui.js';
 import { renderLogin } from './screens/login.js';
@@ -9,6 +9,11 @@ import home from './screens/home.js';
 import orders from './screens/orders.js';
 import customers from './screens/customers.js';
 import catalog from './screens/products.js';
+import patches from './screens/patches.js';
+import productEdit from './screens/product-edit.js';
+import packageEdit from './screens/package-edit.js';
+import customerDetail from './screens/customer-detail.js';
+import customerEdit from './screens/customer-edit.js';
 import settings from './screens/settings.js';
 import comingSoon from './screens/coming-soon.js';
 
@@ -35,8 +40,7 @@ let renderToken = 0;       // ignore results from screens the user already left
 
 // Opened straight from a link there is no page to go back to, so go Home instead.
 function goBack() {
-  if (history.length > 1) history.back();
-  else navigate('/home');
+  back('/home');
 }
 
 function buildShell() {
@@ -55,8 +59,10 @@ function buildShell() {
 }
 
 /**
- * Show a screen. A screen is { title, tab, back?, render(main, params) }.
+ * Show a screen. A screen is { title, tab, back?, render(main, params, view) }.
  * render may be async and may return a refresh function for pull-to-refresh.
+ * `view.setTitle(text)` changes the header once data has loaded; `view.isCurrent()`
+ * is false once the user has moved to another screen.
  */
 async function mount(screen, params = {}) {
   if (!store.data) return; // signed out
@@ -74,8 +80,16 @@ async function mount(screen, params = {}) {
   refreshHandler = null;
   shell.main.replaceChildren();
   window.scrollTo(0, 0);
+  const view = {
+    isCurrent: () => myToken === renderToken,
+    setTitle: (t) => {
+      if (myToken !== renderToken) return;
+      shell.title.textContent = t;
+      document.title = t + ' · TR Orders';
+    }
+  };
   try {
-    const refresh = await screen.render(shell.main, params);
+    const refresh = await screen.render(shell.main, params, view);
     if (myToken === renderToken && typeof refresh === 'function') refreshHandler = refresh;
   } catch (err) {
     if (myToken !== renderToken) return;
@@ -88,7 +102,15 @@ async function mount(screen, params = {}) {
 route('/home', () => mount(home));
 route('/orders', () => mount(orders));
 route('/customers', () => mount(customers));
+route('/customers/new', (p) => mount(customerEdit, p));
+route('/customers/:id', (p) => mount(customerDetail, p));
+route('/customers/:id/edit', (p) => mount(customerEdit, p));
 route('/catalog', () => mount(catalog));
+route('/catalog/patches', () => mount(patches));
+route('/catalog/products/new', (p) => mount(productEdit, p));
+route('/catalog/products/:id', (p) => mount(productEdit, p));
+route('/catalog/packages/new', (p) => mount(packageEdit, p));
+route('/catalog/packages/:id', (p) => mount(packageEdit, p));
 route('/settings', () => mount(settings));
 route('/new/:type', (p) => mount(comingSoon, p));
 fallback(() => navigate('/home', { replace: true }));

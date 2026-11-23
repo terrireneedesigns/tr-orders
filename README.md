@@ -9,7 +9,8 @@ Quote, invoice and order app for **Terri Renee Evolvé**. The full plan is in [S
 
 **Status:**
 - Milestone 1 (Google setup and back end skeleton) is done: `setup()`, the `doPost` router, `auth.login` and `bootstrap`, with a test page.
-- Milestone 2 (front end shell) is done: sign-in screen, Home and the five tabs, Home Screen app setup, offline app shell. Orders, customers and catalog editing come in later milestones.
+- Milestone 2 (front end shell) is done: sign-in screen, Home and the five tabs, Home Screen app setup, offline app shell.
+- Milestone 3 (catalog and customers) is done: add and edit products, packages and their price lines, add-ons and patches; customers list, detail, add and edit, with a duplicate check. Orders come next.
 
 ---
 
@@ -35,11 +36,11 @@ Do all of this signed in as the **business Gmail** (terrireneedesigns@gmail.com)
    - Tick **Show "appsscript.json" manifest file in editor**.
    - Set **Time zone** to **(GMT-07:00) Phoenix** (America/Phoenix).
 4. Back in the **Editor** (`< >` icon), create one script file per `.gs` file in this repo's [`apps-script/`](apps-script/) folder, with the same names:
-   `Code`, `Data`, `Catalog`, `Backup`, `Setup`. (Click **+** > **Script**, type the name without `.gs`, then paste the file's contents. Replace the starter code in `Code.gs`.)
+   `Code`, `Data`, `Catalog`, `Customers`, `Backup`, `Setup`. (Click **+** > **Script**, type the name without `.gs`, then paste the file's contents. Replace the starter code in `Code.gs`.)
 5. Open `appsscript.json` in the editor and replace its contents with [`apps-script/appsscript.json`](apps-script/appsscript.json).
 6. Click **Save** (disk icon).
 
-> **Faster option for Autumn (clasp):** with Node installed, `npm i -g @google/clasp`, `clasp login`, then in `apps-script/` run `clasp clone <scriptId>` into a temp folder to get `.clasp.json`, copy that file into `apps-script/`, and `clasp push`. The script ID is in Project Settings. Do not commit `.clasp.json` if you'd rather keep the script ID private (it is not a password).
+> **Faster option for Autumn (clasp):** see "Updating with clasp" in Part 2. After the first setup, clasp pushes every `.gs` file for you.
 
 ### 1.4 Run setup
 1. In the editor, open **Setup.gs**, pick **setup** in the function dropdown at the top, and click **Run**.
@@ -118,11 +119,30 @@ Running `setup()` again is safe. It only adds what is missing, asks before chang
 
 After changing any Apps Script code:
 
-1. Save in the editor (or `clasp push`).
+1. Paste each changed `.gs` file from [`apps-script/`](apps-script/) over the one in the editor, and add any new file (for example `Customers.gs` in milestone 3) with **+** > **Script**. Save (or `clasp push`).
 2. **Deploy > Manage deployments**, select the existing **TR Orders API** deployment, click the **pencil (Edit)**.
 3. Under **Version**, choose **New version**, then **Deploy**.
 
 **Do not use "New deployment" for updates.** That creates a new URL, and the app and every customer link would still point at the old one. Editing the existing deployment keeps the URL the same forever.
+
+### Updating with clasp (Autumn's computer)
+
+One-time setup:
+1. Install clasp: `npm install -g @google/clasp` (needs Node.js).
+2. Signed in as the business account, turn on **Google Apps Script API** at <https://script.google.com/home/usersettings>.
+3. `clasp login --user business` and pick **terrireneedesigns@gmail.com** in the browser. (`--user business` keeps any other Google sign-in clasp already has.)
+4. Create `apps-script/.clasp.json` with the script ID (Apps Script > Project Settings > IDs). It is listed in `.gitignore`, so it never goes to GitHub:
+   ```json
+   { "scriptId": "<script ID>", "rootDir": "." }
+   ```
+
+Each update, from the `apps-script` folder:
+1. `clasp --user business push`: uploads every file in the folder, adding new ones. It replaces the whole project, so make any change here, not in the online editor (or run `clasp --user business pull` first).
+2. `clasp --user business list-deployments`: find the **TR Orders API** deployment ID (the one in `js/config.js`), not the `@HEAD` one.
+3. `clasp --user business update-deployment <deployment ID> -d "TR Orders API"`: makes a new version of that same deployment, so the URL stays the same.
+4. Check: open the Web App URL in a browser; it shows the new version number.
+
+**Order matters:** update the back end first, then upload the front end. A newer app talking to an older back end shows "Unknown action." To check which back end version is live, open Settings in the app (it shows "server 0.3.0") or open the Web App URL in a browser.
 
 ---
 
@@ -162,4 +182,5 @@ Editing the Sheet by hand is fine (for example fixing a typo in a patch name). T
 - Local app with a fake back end: `node tests/dev-server.js`, then open <http://localhost:8080/tr-orders/> (fake passcode `123456`, data resets on restart). It serves `js/config.js` pointed at the fake without changing the file. On localhost the service worker loads from the network first, so edits show on reload.
 - Replacing a logo: the app shell uses smaller copies, `assets/logo-full-sm.png` (480 px wide) and `assets/logo-monogram-sm.png` (160 px wide). After replacing `logo-full.png` or `logo-monogram.png`, make new small copies (macOS: `sips -Z 480 logo-full.png --out logo-full-sm.png` and `sips -Z 160 logo-monogram.png --out logo-monogram-sm.png`), or just copy the new file over the `-sm` name. No code changes needed either way.
 - API: POST `{ action, token, payload }` as `text/plain;charset=utf-8` (not `application/json`, which triggers a CORS preflight that Apps Script cannot answer). Responses are `{ ok: true, data }` or `{ ok: false, error: { code, message } }`, where `message` is safe to show as is.
-- Actions so far: `ping`, `auth.login`, `auth.logout`, `auth.logoutAll`, `auth.changePasscode`, `bootstrap`, `backup.run`.
+- Actions so far: `ping`, `auth.login`, `auth.logout`, `auth.logoutAll`, `auth.changePasscode`, `bootstrap`, `backup.run`, `customers.save` / `get` / `list`, `catalog.saveProduct` / `savePackage` / `saveTemplateLines` / `saveAddOn` / `savePatch` / `reorder`.
+- Money and rules tests: open `tests/rules.test.html` in a browser (from the dev server or GitHub Pages).

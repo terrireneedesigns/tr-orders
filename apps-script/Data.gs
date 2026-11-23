@@ -168,7 +168,11 @@ function formatFor_(col) {
 function cellIn_(col, v) {
   if (BOOL_COLS[col]) return v === true || v === 'TRUE' || v === 'true';
   if (NUM_COLS[col]) return (v === '' || v === null || v === undefined) ? '' : Number(v);
-  return (v === null || v === undefined) ? '' : String(v);
+  if (v === null || v === undefined) return '';
+  v = String(v);
+  // A leading apostrophe makes Sheets store text that starts with "=" as text, not a formula.
+  // Sheets hides the apostrophe and getValues() returns the text without it.
+  return v.charAt(0) === '=' ? "'" + v : v;
 }
 
 function cellOut_(col, v) {
@@ -233,6 +237,70 @@ function updateRow_(name, obj) {
 /** Rewrite many existing rows (objects from readTable_). */
 function updateRows_(name, objs) {
   objs.forEach(function (o) { updateRow_(name, o); });
+}
+
+/**
+ * Replace every data row of a tab with `objs` (bulk), clearing leftover rows.
+ * Only for definition tables such as TemplateLines, never for records.
+ */
+function rewriteTable_(name, objs) {
+  var sh = sheet_(name);
+  var headers = headers_(sh);
+  var oldCount = Math.max(0, sh.getLastRow() - 1);
+  var extra = objs.length + 1 - sh.getMaxRows();
+  if (extra > 0) sh.insertRowsAfter(sh.getMaxRows(), extra);
+  if (objs.length) {
+    var range = sh.getRange(2, 1, objs.length, headers.length);
+    var fmt = headers.map(formatFor_);
+    range.setNumberFormats(objs.map(function () { return fmt; }));
+    range.setValues(objs.map(function (o) { return rowFor_(headers, o); }));
+  }
+  if (oldCount > objs.length) {
+    sh.getRange(2 + objs.length, 1, oldCount - objs.length, headers.length).clearContent();
+  }
+}
+
+function findBy_(rows, col, value) {
+  for (var i = 0; i < rows.length; i++) if (rows[i][col] === value) return rows[i];
+  return null;
+}
+
+function maxSort_(rows) {
+  return rows.reduce(function (m, r) { return Math.max(m, r.sort || 0); }, 0);
+}
+
+/* ---------- input validation (friendly messages) ---------- */
+
+var MAX_CENTS = 10000000; // $100,000
+
+function vStr_(v, label, max, required) {
+  v = (v === null || v === undefined) ? '' : String(v).trim();
+  if (required && !v) throw appError('VALIDATION', label + ' is required.');
+  if (v.length > max) throw appError('VALIDATION', label + ' is too long (' + max + ' characters at most).');
+  return v;
+}
+
+function vCents_(v, label) {
+  var n = Number(v);
+  if (v === '' || v === null || v === undefined || !Number.isInteger(n) || Math.abs(n) > MAX_CENTS) {
+    throw appError('VALIDATION', label + ' must be an amount up to $100,000.');
+  }
+  return n;
+}
+
+function vBool_(v, dflt) {
+  if (v === undefined || v === null) return !!dflt;
+  return v === true || v === 'true' || v === 'TRUE';
+}
+
+function vEnum_(v, allowed, label) {
+  if (allowed.indexOf(v) === -1) throw appError('VALIDATION', label + ' is not one of the choices.');
+  return v;
+}
+
+function vId_(v, label) {
+  if (typeof v !== 'string' || !v || v.length > 64) throw appError('VALIDATION', label + ' is missing.');
+  return v;
 }
 
 /** Copy of an object without hidden fields, safe to return to the admin app. */

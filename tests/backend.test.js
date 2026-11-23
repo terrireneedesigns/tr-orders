@@ -47,7 +47,9 @@ function makeRange(s, r, c, nr, nc) {
       vals.forEach((row, i) => row.forEach((v, j) => {
         const f = s.fmt[key(i, j)] || s.fmt[`col${c + j}`];
         // Mimic Sheets: numeric-looking text in a non-text cell becomes a number.
-        if (f !== '@' && typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
+        if (typeof v === 'string' && v.charAt(0) === "'") v = v.slice(1); // Sheets hides a leading apostrophe
+        else if (typeof v === 'string' && v.charAt(0) === '=') throw new Error('Formula written to sheet: ' + v);
+        else if (f !== '@' && typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
         s.data[r - 1 + i] = s.data[r - 1 + i] || [];
         s.data[r - 1 + i][c - 1 + j] = v;
       }));
@@ -60,6 +62,10 @@ function makeRange(s, r, c, nr, nc) {
       return rg;
     },
     setNumberFormats: (fs2) => { fs2.forEach((row, i) => row.forEach((f, j) => { s.fmt[key(i, j)] = f; })); return rg; },
+    clearContent: () => {
+      for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) { if (s.data[r - 1 + i]) s.data[r - 1 + i][c - 1 + j] = ''; }
+      return rg;
+    },
     setFontWeight: () => rg, setBackground: () => rg, setFontColor: () => rg
   };
   return rg;
@@ -348,6 +354,145 @@ test('backup makes a dated copy, replaces same-day copy, removes ones older than
 test('new rows keep phone numbers and numeric-looking text as text', () => {
   vm.runInContext(`appendRows_('Customers', [{customer_id:'C_1', name:'Test', phone:'6235216235', email:'', notes:'', created_at: nowIso_(), updated_at: nowIso_(), archived:false}])`, env.ctx);
   const c = table('Customers')[0]; eq(c.phone, '6235216235'); eq(typeof c.phone, 'string'); eq(c.archived, false);
+});
+
+/* ---------------- milestone 3: catalog and customers ---------------- */
+
+const tok = () => call(env, 'auth.login', { passcode: '654321' }).data.token;
+let t3;
+test('catalog and customer actions need a session', () => {
+  ['customers.save', 'customers.list', 'catalog.saveProduct', 'catalog.savePatch', 'catalog.reorder'].forEach(a => {
+    eq(call(env, a, {}).error.code, 'AUTH', a);
+  });
+  t3 = tok();
+});
+
+let newProductId;
+test('new product gets one "Custom" package; validation is friendly', () => {
+  eq(call(env, 'catalog.saveProduct', { name: '' }, t3).error.message, 'Product name is required.');
+  eq(call(env, 'catalog.saveProduct', { name: 'Tote', detail_form: 'robot' }, t3).error.code, 'VALIDATION');
+  const r = call(env, 'catalog.saveProduct', { name: 'Custom Tote', detail_form: 'simple' }, t3);
+  eq(r.ok, true); newProductId = r.data.id;
+  const p = r.data.catalog.products.find(x => x.product_id === newProductId);
+  eq(p.sort, 4); eq(p.active, true);
+  eq(r.data.catalog.packages.filter(k => k.product_id === newProductId).map(k => k.name), ['Custom']);
+});
+
+test('edit product keeps its id; hide (inactive) works', () => {
+  const r = call(env, 'catalog.saveProduct', { product_id: newProductId, name: 'Custom Tote Bag', detail_form: 'simple', active: false }, t3);
+  const p = r.data.catalog.products.find(x => x.product_id === newProductId);
+  eq(p.name, 'Custom Tote Bag'); eq(p.active, false);
+  eq(call(env, 'catalog.saveProduct', { product_id: 'PRD_nope', name: 'x' }, t3).error.code, 'NOT_FOUND');
+});
+
+test('package with lines saves in one call; other packages untouched', () => {
+  const before = table('TemplateLines').length;
+  const r = call(env, 'catalog.savePackage', { product_id: newProductId, name: 'Deluxe', price_note: '$120', lines: [
+    { label: 'Tote bag', amount_cents: 4000, kind: 'base' },
+    { label: 'Two patches', amount_cents: 8500, kind: 'base' },
+    { label: 'Package savings', amount_cents: -500, kind: 'savings' }
+  ] }, t3);
+  eq(r.ok, true);
+  const lines = r.data.catalog.templateLines.filter(l => l.package_id === r.data.id);
+  eq(lines.map(l => l.amount_cents), [4000, 8500, -500]); eq(lines.map(l => l.sort), [1, 2, 3]);
+  eq(table('TemplateLines').length, before + 3);
+  // jacket Standard still $275
+  const std = table('Packages').find(p => p.name === 'Standard');
+  eq(table('TemplateLines').filter(l => l.package_id === std.package_id).reduce((a, l) => a + l.amount_cents, 0), 27500);
+});
+
+test('saveTemplateLines replaces one package (fewer lines clears leftover rows)', () => {
+  const pk = table('Packages').find(p => p.name === 'Deluxe');
+  const r = call(env, 'catalog.saveTemplateLines', { package_id: pk.package_id, lines: [{ label: 'All in', amount_cents: 11500, kind: 'base' }] }, t3);
+  eq(r.ok, true);
+  eq(table('TemplateLines').filter(l => l.package_id === pk.package_id).length, 1);
+  eq(table('TemplateLines').length, 24 + 1, 'seeded 24 + 1');
+  const bad = call(env, 'catalog.saveTemplateLines', { package_id: pk.package_id, lines: [{ label: 'x', amount_cents: 12.5 }] }, t3);
+  eq(bad.error.message, 'Line 1 amount must be an amount up to $100,000.');
+  eq(call(env, 'catalog.saveTemplateLines', { package_id: pk.package_id, lines: [{ label: 'x', amount_cents: 10000001 }] }, t3).error.code, 'VALIDATION');
+  eq(call(env, 'catalog.saveTemplateLines', { package_id: pk.package_id, lines: [{ label: 'x', amount_cents: 1, kind: 'addon' }] }, t3).error.code, 'VALIDATION');
+});
+
+test('add-ons: add, edit price/rule, bad rule rejected', () => {
+  const r = call(env, 'catalog.saveAddOn', { product_id: newProductId, label: 'Monogram', amount_cents: 1500 }, t3);
+  eq(r.ok, true);
+  const a = r.data.catalog.addOns.find(x => x.addon_id === r.data.id); eq(a.rule, ''); eq(a.price_editable, false); eq(a.sort, 1);
+  const r2 = call(env, 'catalog.saveAddOn', { addon_id: r.data.id, label: 'Monogram', amount_cents: 1800, price_editable: true, rule: 'extra_patch' }, t3);
+  const a2 = r2.data.catalog.addOns.find(x => x.addon_id === r.data.id); eq(a2.amount_cents, 1800); eq(a2.price_editable, true); eq(a2.rule, 'extra_patch');
+  eq(call(env, 'catalog.saveAddOn', { product_id: newProductId, label: 'x', amount_cents: 1, rule: 'zap' }, t3).error.code, 'VALIDATION');
+});
+
+test('patches: add, rename number, duplicates refused, numbers stay text', () => {
+  const r = call(env, 'catalog.savePatch', { patch_no: '46', name: 'New patch', tier: 'premium', group: 'Large and custom-ordered' }, t3);
+  eq(r.ok, true); eq(r.data.catalog.patches[r.data.catalog.patches.length - 1].patch_no, '46');
+  eq(call(env, 'catalog.savePatch', { patch_no: '01', name: 'Clash' }, t3).error.message, 'Patch No. 01 already exists. Choose another number.');
+  const r2 = call(env, 'catalog.savePatch', { original_patch_no: '46', patch_no: '046', name: 'New patch', tier: 'premium', group: 'Large and custom-ordered', active: false }, t3);
+  eq(r2.ok, true);
+  const p = table('Patches').find(x => x.patch_no === '046'); ok(p, 'renamed'); eq(p.active, false);
+  ok(!table('Patches').find(x => x.patch_no === '46'));
+  eq(call(env, 'catalog.savePatch', { patch_no: 'a b', name: 'x' }, t3).error.code, 'VALIDATION');
+  eq(call(env, 'catalog.savePatch', { patch_no: '50', name: 'x', group: 'Huge' }, t3).error.code, 'VALIDATION');
+});
+
+test('reorder sets sort in the given order', () => {
+  const ids = table('Products').map(p => p.product_id).reverse();
+  const r = call(env, 'catalog.reorder', { kind: 'products', ids }, t3);
+  eq(r.data.catalog.products.map(p => p.product_id), ids);
+  eq(call(env, 'catalog.reorder', { kind: 'Sessions', ids: [] }, t3).error.code, 'VALIDATION');
+});
+
+test('text starting with "=" is stored as text, not a formula', () => {
+  const r = call(env, 'catalog.saveAddOn', { product_id: newProductId, label: '=HYPERLINK("x")', amount_cents: 100 }, t3);
+  eq(r.ok, true);
+  ok(table('AddOns').some(a => a.label === '=HYPERLINK("x")'));
+});
+
+let custId;
+test('customers: add cleans phone and email; name required', () => {
+  eq(call(env, 'customers.save', { name: ' ' }, t3).error.message, 'Name is required.');
+  eq(call(env, 'customers.save', { name: 'A', email: 'nope' }, t3).error.code, 'VALIDATION');
+  const r = call(env, 'customers.save', { name: 'Gloria Hayes', phone: '(602) 555-0142', email: ' Gloria@Example.com ', notes: 'Size L, likes red' }, t3);
+  eq(r.data.saved, true); custId = r.data.customer.customer_id;
+  eq(r.data.customer.phone, '602-555-0142'); eq(r.data.customer.email, 'gloria@example.com');
+  eq(r.data.customer.stats.orders, 0); eq(r.data.customer.stats.repeat, false);
+});
+
+test('adding a duplicate phone or email asks first; force saves anyway (5.9)', () => {
+  const byPhone = call(env, 'customers.save', { name: 'G. Hayes', phone: '1-602-555-0142' }, t3);
+  eq(byPhone.data.saved, false); eq(byPhone.data.duplicates.map(c => c.customer_id), [custId]);
+  const byEmail = call(env, 'customers.save', { name: 'Glo', email: 'GLORIA@example.com' }, t3);
+  eq(byEmail.data.saved, false);
+  eq(table('Customers').length, 2, 'nothing saved yet');  // includes the earlier phone-format test row
+  const forced = call(env, 'customers.save', { name: 'Glo', email: 'gloria@example.com', force: true }, t3);
+  eq(forced.data.saved, true);
+  // editing an existing customer never triggers the duplicate check
+  const ed = call(env, 'customers.save', { customer_id: custId, name: 'Gloria Hayes', phone: '602-555-0142', email: 'gloria@example.com', notes: 'Size L' }, t3);
+  eq(ed.data.saved, true); eq(ed.data.customer.notes, 'Size L');
+});
+
+test('archive hides nothing server side but is flagged; list sorted by name', () => {
+  const r = call(env, 'customers.save', { customer_id: custId, name: 'Gloria Hayes', archived: true }, t3);
+  eq(r.data.customer.archived, true);
+  const list = call(env, 'customers.list', {}, t3).data;
+  eq(list.map(c => c.name), list.map(c => c.name).slice().sort((a, b) => a.localeCompare(b)));
+  ok(list.find(c => c.customer_id === custId).archived);
+  call(env, 'customers.save', { customer_id: custId, name: 'Gloria Hayes', archived: false }, t3);
+});
+
+test('stats: issued invoices only; repeat = 2+ paid; has unpaid; total spent', () => {
+  const base = { public_id: 'x', customer_id: custId, fulfillment: 'pickup', upfront_percent: 100, view_count: 0, discount_cents: 0, subtotal_cents: 0 };
+  vm.runInContext('appendRows_', env.ctx)('Documents', [
+    Object.assign({}, base, { doc_id: 'D1', type: 'invoice', number: 'TR-1001', status: 'issued', stage: 'completed', total_cents: 27500, paid_cents: 27500, created_at: '2026-10-01T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D2', type: 'invoice', number: 'TR-1002', status: 'issued', stage: 'in_progress', total_cents: 34100, paid_cents: 34100, created_at: '2026-11-01T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D3', type: 'invoice', number: 'TR-1003', status: 'issued', stage: 'awaiting_payment', total_cents: 33500, paid_cents: 0, created_at: '2026-11-10T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D4', type: 'invoice', number: 'TR-1004', status: 'void', stage: 'cancelled', total_cents: 99900, paid_cents: 0, created_at: '2026-11-11T10:00:00-07:00' }),
+    Object.assign({}, base, { doc_id: 'D5', type: 'quote', number: 'Q-1001', status: 'sent', stage: '', total_cents: 40500, paid_cents: 0, created_at: '2026-11-12T10:00:00-07:00' })
+  ]);
+  const g = call(env, 'customers.get', { customer_id: custId }, t3).data;
+  eq(g.customer.stats, { orders: 3, paid_orders: 2, total_spent_cents: 61600, last_order_at: '2026-11-10T10:00:00-07:00', repeat: true, has_unpaid: true });
+  eq(g.orders.map(o => o.number), ['Q-1001', 'TR-1004', 'TR-1003', 'TR-1002', 'TR-1001']);
+  ok(!('internal_notes' in g.orders[0]), 'order summaries are trimmed');
+  eq(call(env, 'customers.get', { customer_id: 'C_nope' }, t3).error.code, 'NOT_FOUND');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

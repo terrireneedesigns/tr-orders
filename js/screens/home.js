@@ -1,6 +1,6 @@
 // screens/home.js: Home tab. New order/quote buttons, needs attention, snapshot.
 // Live lists and numbers arrive in milestone 7; this is the layout.
-import { h } from '../ui.js';
+import { h, setChildren } from '../ui.js';
 import { loadBootstrap } from '../store.js';
 
 export default {
@@ -8,7 +8,7 @@ export default {
   tab: 'home',
   render(main) {
     const draw = () => {
-      main.replaceChildren(
+      setChildren(main, 
         h('section', { class: 'section home-actions' },
           h('a', { class: 'btn btn-big', href: '#/new/order' }, '+ New Order'),
           h('a', { class: 'btn btn-big btn-secondary', href: '#/new/quote' }, '+ New Quote')),

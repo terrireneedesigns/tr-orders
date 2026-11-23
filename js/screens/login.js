@@ -1,6 +1,6 @@
 // screens/login.js: passcode sign-in screen.
 import { call, setToken, deviceLabel } from '../api.js';
-import { h } from '../ui.js';
+import { h, setChildren } from '../ui.js';
 
 /**
  * Render the sign-in screen into `root`. `onSuccess` runs after a token is saved.
@@ -44,7 +44,7 @@ export function renderLogin(root, { message = '', onSuccess }) {
   error,
   button);
 
-  root.replaceChildren(h('div', { class: 'login' },
+  setChildren(root, h('div', { class: 'login' },
     h('div', { class: 'login-inner' },
       h('img', { src: 'assets/logo-full-sm.png', alt: 'Terri Renee Evolvé', width: '220', height: '184' }),
       h('h1', null, 'TR Orders'),
