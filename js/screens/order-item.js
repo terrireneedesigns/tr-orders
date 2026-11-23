@@ -198,7 +198,7 @@ function simpleForm(item, ctx) {
   return h('div', null,
     notes,
     h('p', { class: 'hint' }, 'Shown to the customer on their page.'),
-    h('p', { class: 'hint' }, 'Photos can be added in a later update.'));
+    h('p', { class: 'hint' }, 'Add photos on the order page after saving.'));
 }
 
 function textField(label, value, onInput, props = {}) {
@@ -248,7 +248,7 @@ function jacketForm(item, ctx) {
     h('p', { class: 'hint' }, 'Up to 3 extra patches (7 in all) fit the package prices.'),
 
     h('div', { class: 'field', style: { marginTop: '16px' } }, h('label', { for: notes.id }, 'Notes'), notes),
-    h('p', { class: 'hint' }, 'Photos can be added in a later update.'));
+    h('p', { class: 'hint' }, 'Add photos on the order page after saving.'));
 }
 
 function addSpot(d, key) {

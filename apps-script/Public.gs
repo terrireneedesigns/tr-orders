@@ -60,7 +60,7 @@ function publicApproveQuote_(p) {
   var id = validPublicId_(p.public_id);
   var name = vStr_(p.name, 'Your full name', 100, true);
   if (p.terms_accepted !== true) throw appError('VALIDATION', 'Please tick the box to agree to the terms.');
-  return withLock_(function () {
+  var done = withLock_(function () {
     var docs = readTable_('Documents');
     var quote = findBy_(docs, 'public_id', id);
     if (!quote || quote.type !== 'quote' || quote.status === 'void' || quote.status === 'draft') throw inactiveLinkError_();
@@ -74,15 +74,17 @@ function publicApproveQuote_(p) {
     updateRow_('Documents', quote);
     logEvent_('approved', quote.doc_id, 'Approved by ' + name);
     var invoice = convertQuote_(quote, { sentMethod: 'customer_approved' });
-    return publicDoc_(invoice, readTable_('Documents'));
+    return { quote: quote, invoice: invoice, result: publicDoc_(invoice, readTable_('Documents')) };
   });
+  notifyApproved_(done.quote, done.invoice, name); // after saving; never throws
+  return done.result;
 }
 
 /** public.declineQuote: { public_id, note? } */
 function publicDeclineQuote_(p) {
   var id = validPublicId_(p.public_id);
   var note = vStr_(p.note, 'Note', 1000);
-  return withLock_(function () {
+  var done = withLock_(function () {
     var docs = readTable_('Documents');
     var quote = findBy_(docs, 'public_id', id);
     if (!quote || quote.type !== 'quote' || quote.status === 'void' || quote.status === 'draft') throw inactiveLinkError_();
@@ -93,8 +95,10 @@ function publicDeclineQuote_(p) {
     quote.updated_at = quote.declined_at;
     updateRow_('Documents', quote);
     logEvent_('declined', quote.doc_id, note ? 'Declined: ' + note : 'Declined');
-    return publicDoc_(quote, docs);
+    return { quote: quote, result: publicDoc_(quote, docs) };
   });
+  notifyDeclined_(done.quote, note);
+  return done.result;
 }
 
 /* ---------- allow-list serializer ---------- */

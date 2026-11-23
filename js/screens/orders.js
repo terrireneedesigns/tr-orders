@@ -30,6 +30,7 @@ export default {
   title: 'Orders',
   tab: 'orders',
   render(main, params, view) {
+    if (params.query && FILTERS.some((f) => f.value === params.query.filter)) filter = params.query.filter;
     let rows = [];
     let total = 0;
     let searchTimer = null;

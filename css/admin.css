@@ -227,3 +227,19 @@ body { overscroll-behavior-y: none; }
   box-shadow: 0 6px 24px rgba(32, 28, 25, 0.3);
 }
 .update-banner .btn { min-height: 44px; padding: 0 16px; flex: none; }
+
+/* ---------- home dashboard, photos (milestone 7) ---------- */
+
+.needs-group + .needs-group { margin-top: 16px; }
+.needs-title { font: 600 17px var(--font-body); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+.needs-title .count { background: var(--ink); color: var(--cream); border-radius: 999px; font-size: 13px; padding: 1px 9px; }
+.stat-card { color: inherit; text-decoration: none; display: block; }
+.stat-card .num { font-size: 26px; }
+
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.photo-thumb { aspect-ratio: 1; padding: 0; border: 0; border-radius: var(--radius); overflow: hidden; background: var(--panel); cursor: pointer; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-full-wrap { min-height: 120px; display: flex; align-items: center; justify-content: center; }
+.photo-full { width: 100%; height: auto; border-radius: var(--radius); }
+.patch-photo-wrap { margin-bottom: 8px; }
+.patch-photo { max-width: 160px; max-height: 160px; border-radius: var(--radius); display: block; }

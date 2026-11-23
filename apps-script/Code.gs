@@ -7,7 +7,7 @@
  *   { "ok": true, "data": ... }  or  { "ok": false, "error": { "code", "message" } }
  */
 
-var API_VERSION = '0.6.0';
+var API_VERSION = '0.7.0';
 var SESSION_DAYS = 180;
 var LOGIN_MAX_FAILS = 10;
 var LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -22,6 +22,11 @@ function routes_() {
     'auth.logoutAll': { auth: true, fn: authLogoutAll_ },
     'auth.changePasscode': { auth: true, fn: authChangePasscode_ },
     'bootstrap': { auth: true, fn: bootstrap_ },
+    'dashboard.get': { auth: true, fn: getDashboard_ },
+    'settings.save': { auth: true, fn: saveSettings_ },
+    'photos.upload': { auth: true, fn: uploadPhoto_ },
+    'photos.get': { auth: true, fn: getPhoto_ },
+    'photos.delete': { auth: true, fn: deletePhoto_ },
     'docs.save': { auth: true, fn: saveDoc_ },
     'docs.get': { auth: true, fn: getDoc_ },
     'docs.list': { auth: true, fn: listDocs_ },
@@ -216,7 +221,13 @@ function authChangePasscode_(p) {
 /* ---------- bootstrap ---------- */
 
 /** Everything the admin app needs on start, in one call. */
-function bootstrap_() {
+function bootstrap_(p) {
+  // The app sends its own address so emails can link back to it (admin-only, so it can be trusted).
+  var appUrl = p && typeof p.app_url === 'string' ? p.app_url : '';
+  if (/^https?:\/\/[^\s"'<>]{3,300}\/$/.test(appUrl)) {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty('APP_URL') !== appUrl) props.setProperty('APP_URL', appUrl);
+  }
   var cat = getCatalog_();
   var customers = readTable_('Customers').map(clean_);
   customers.sort(function (a, b) { return a.name.localeCompare(b.name); });

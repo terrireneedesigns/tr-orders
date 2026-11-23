@@ -238,6 +238,7 @@ var SEED_SETTINGS = [
   ['msg_invoice', 'Hi {first_name}, here is your invoice {number} from Terri Renee Evolvé for {total}. Payment details are on the page: {link}'],
   ['msg_receipt', 'Thank you, {first_name}! Your payment for {number} is received: {link}'],
   ['msg_ready', 'Hi {first_name}, your order {number} is ready! {fulfillment_text}'],
+  ['daily_digest', 'off'],
   ['terms_title', 'True Value Statement'],
   ['terms_json', JSON.stringify(SEED_TERMS)]
 ];

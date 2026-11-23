@@ -101,7 +101,7 @@ async function mount(screen, params = {}) {
 /* ---------- routes ---------- */
 
 route('/home', () => mount(home));
-route('/orders', () => mount(orders));
+route('/orders', (p) => mount(orders, p));
 route('/customers', () => mount(customers));
 route('/customers/new', (p) => mount(customerEdit, p));
 route('/customers/:id', (p) => mount(customerDetail, p));

@@ -2,7 +2,7 @@
 // sign out, sign out all devices, app version.
 import { APP_VERSION } from '../config.js';
 import { call, clearToken } from '../api.js';
-import { h, confirmDialog, toast, setChildren } from '../ui.js';
+import { h, confirmDialog, toast, setChildren, toggleRow, showError, formatDateTime } from '../ui.js';
 import { store, loadBootstrap } from '../store.js';
 import { signedOut } from '../app.js';
 
@@ -24,10 +24,17 @@ export default {
             row('Send to', s.zelle_contact), row('Name shown', s.zelle_display_name))),
 
         h('section', { class: 'section' },
+          h('h2', { class: 'label' }, 'Emails'),
+          h('p', { class: 'small muted' }, 'When a customer approves or declines a quote, an email goes to ' + (s.notify_email || 'the business inbox') + '.'),
+          digestToggle(s)),
+
+        h('section', { class: 'section stack' },
           h('h2', { class: 'label' }, 'Data'),
           store.data.sheetUrl
             ? h('a', { class: 'btn btn-secondary btn-block', href: store.data.sheetUrl, target: '_blank', rel: 'noopener' }, 'Open the Google Sheet')
-            : null),
+            : null,
+          backupButton(),
+          h('p', { class: 'small muted' }, 'A copy is also saved every night at about 2 AM. Copies are kept for 30 days.')),
 
         h('section', { class: 'section stack' },
           h('h2', { class: 'label' }, 'Sign in'),
@@ -70,4 +77,39 @@ async function signOutAll() {
   }
   clearToken();
   signedOut('All devices are signed out.');
+}
+
+function digestToggle(s) {
+  const row = toggleRow('Daily summary email', s.daily_digest === 'on', 'About 8 AM, only on days with overdue or ready-but-not-picked-up orders.');
+  row.input.addEventListener('change', async () => {
+    const on = row.input.checked;
+    try {
+      store.data.settings = await call('settings.save', { values: { daily_digest: on ? 'on' : 'off' } });
+      toast(on ? 'Daily summary turned on' : 'Daily summary turned off');
+    } catch (err) {
+      row.input.checked = !on;
+      showError(err);
+    }
+  });
+  return row;
+}
+
+function backupButton() {
+  const result = h('div');
+  const btn = h('button', { type: 'button', class: 'btn btn-secondary btn-block' }, 'Back up now');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Backing up…';
+    try {
+      const r = await call('backup.run');
+      toast('Backup saved');
+      setChildren(result, h('p', { class: 'small' }, 'Saved "' + r.name + '" at ' + formatDateTime(new Date().toISOString()) + '. ',
+        h('a', { href: r.url, target: '_blank', rel: 'noopener' }, 'Open it')));
+    } catch (err) {
+      showError(err);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Back up now';
+  });
+  return h('div', { class: 'stack' }, btn, result);
 }

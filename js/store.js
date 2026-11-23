@@ -1,5 +1,6 @@
 // store.js: data loaded once at start (settings, catalog, customers) shared by every screen.
 import { call } from './api.js';
+import { BASE_URL } from './config.js';
 
 export const store = {
   data: null,      // result of the `bootstrap` action
@@ -8,7 +9,8 @@ export const store = {
 
 /** Load (or reload) settings, catalog and customers from the back end. */
 export async function loadBootstrap() {
-  store.data = await call('bootstrap');
+  // The app's own address lets the back end put links to orders in its emails.
+  store.data = await call('bootstrap', { app_url: BASE_URL });
   store.loadedAt = Date.now();
   return store.data;
 }

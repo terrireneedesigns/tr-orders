@@ -3,6 +3,8 @@ import { h, field, textInput, selectInput, toggleRow, segmented, searchBox, shee
 import { store, loadBootstrap, setCatalog } from '../store.js';
 import { call, ApiError } from '../api.js';
 import { catalogTabs, catalogNote } from './products.js';
+import { pickPhoto, resizePhoto, photoSrc } from '../photos.js';
+import { showError } from '../ui.js';
 
 const GROUPS = ['Small and medium', 'Large and custom-ordered', 'Back-size (9 in and up)'];
 
@@ -98,8 +100,42 @@ function editPatch(patch, redraw) {
     h('div', { class: 'field' }, h('span', null, 'Tier'), tierCtl),
     field('Group', group),
     active,
-    h('p', { class: 'small muted' }, 'Patch photos can be added in a later update.'),
+    patch ? patchPhotoBlock(patch) : h('p', { class: 'small muted' }, 'You can add a photo after saving the patch.'),
     h('div', { class: 'actions' }, save,
       h('button', { class: 'btn btn-secondary btn-block', type: 'button', onclick: () => close() }, 'Cancel')));
   });
+}
+
+/** Photo for an existing patch: shows it and lets Terri add or replace it. */
+function patchPhotoBlock(patch) {
+  const img = h('img', { class: 'patch-photo', alt: 'Patch No. ' + patch.patch_no });
+  const wrap = h('div', { class: 'patch-photo-wrap' });
+  const btn = h('button', { type: 'button', class: 'btn btn-secondary btn-block' }, patch.photo_file_id ? 'Replace photo' : '+ Add photo');
+  let version = patch.photo_file_id;
+  const show = () => {
+    if (!version) { setChildren(wrap); return; }
+    setChildren(wrap, h('div', { class: 'spinner', 'aria-label': 'Loading' }));
+    photoSrc({ patch_no: patch.patch_no, v: version }, true).then((src) => { img.src = src; setChildren(wrap, img); })
+      .catch(() => setChildren(wrap, h('p', { class: 'small muted' }, 'Photo unavailable.')));
+  };
+  btn.addEventListener('click', async () => {
+    const file = await pickPhoto();
+    if (!file) return;
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    try {
+      const r = await call('photos.upload', { patch_no: patch.patch_no, data: await resizePhoto(file, 1000) });
+      setCatalog(r.catalog);
+      version = (r.catalog.patches.find((p) => p.patch_no === patch.patch_no) || {}).photo_file_id;
+      toast('Photo saved');
+      show();
+      btn.textContent = 'Replace photo';
+    } catch (err) {
+      showError(err);
+      btn.textContent = version ? 'Replace photo' : '+ Add photo';
+    }
+    btn.disabled = false;
+  });
+  show();
+  return h('div', { class: 'field' }, h('span', null, 'Photo (optional)'), wrap, btn);
 }

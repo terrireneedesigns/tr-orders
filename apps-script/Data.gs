@@ -375,3 +375,66 @@ function clearCaches_() {
 function logEvent_(action, docId, detail) {
   appendRows_('Log', [{ ts: nowIso_(), action: action, doc_id: docId || '', detail: detail || '' }]);
 }
+
+/* ---------- settings.save ---------- */
+
+function vIntIn_(v, label, min, max) {
+  var n = Number(v);
+  if (!Number.isInteger(n) || n < min || n > max) throw appError('VALIDATION', label + ' must be a whole number from ' + min + ' to ' + max + '.');
+  return String(n);
+}
+
+function vEmailSetting_(v, label) {
+  var e = vStr_(v, label, 100).toLowerCase();
+  if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw appError('VALIDATION', label + ' doesn\'t look like an email address.');
+  return e;
+}
+
+/** Which settings the app may change, and how each is checked. Numbering keys are deliberately not here. */
+var SETTINGS_RULES = {
+  business_name: function (v) { return vStr_(v, 'Business name', 100, true); },
+  phone: function (v) { return vStr_(v, 'Phone', 30); },
+  email: function (v) { return vEmailSetting_(v, 'Email'); },
+  website: function (v) { return vStr_(v, 'Website', 100); },
+  zelle_contact: function (v) { return vStr_(v, 'Zelle number or email', 60, true); },
+  zelle_display_name: function (v) { return vStr_(v, 'Zelle name', 60, true); },
+  upfront_percent_default: function (v) { return vIntIn_(v, 'Upfront percent', 1, 100); },
+  unpaid_flag_days: function (v) { return vIntIn_(v, 'Unpaid days', 1, 90); },
+  ready_flag_days: function (v) { return vIntIn_(v, 'Ready days', 1, 90); },
+  quote_expiry_days: function (v) { return vIntIn_(v, 'Quote expiry days', 1, 365); },
+  notify_email: function (v) { return vEmailSetting_(v, 'Notification email'); },
+  msg_quote: function (v) { return vStr_(v, 'Quote message', 1000, true); },
+  msg_invoice: function (v) { return vStr_(v, 'Invoice message', 1000, true); },
+  msg_receipt: function (v) { return vStr_(v, 'Receipt message', 1000, true); },
+  msg_ready: function (v) { return vStr_(v, 'Ready message', 1000, true); },
+  terms_title: function (v) { return vStr_(v, 'Terms title', 100, true); },
+  daily_digest: function (v) { return vEnum_(v, ['on', 'off'], 'Daily summary'); },
+  terms: function (v) {
+    if (!Array.isArray(v) || v.length > 30) throw appError('VALIDATION', 'The terms are not valid.');
+    return JSON.stringify(v.map(function (t, i) {
+      return { title: vStr_(t && t.title, 'Term ' + (i + 1) + ' title', 100, true), text: vStr_(t && t.text, 'Term ' + (i + 1) + ' text', 2000, true) };
+    }));
+  }
+};
+
+/** settings.save: { values: { key: value } } -> settings. Unknown keys are refused. */
+function saveSettings_(p) {
+  var values = p.values;
+  if (!values || typeof values !== 'object' || Array.isArray(values)) throw appError('VALIDATION', 'Nothing to save.');
+  var clean = {};
+  Object.keys(values).forEach(function (k) {
+    if (!SETTINGS_RULES[k]) throw appError('VALIDATION', 'That setting can\'t be changed here.');
+    clean[k === 'terms' ? 'terms_json' : k] = SETTINGS_RULES[k](values[k]);
+  });
+  return withLock_(function () {
+    var rows = readTable_('Settings');
+    var add = [];
+    Object.keys(clean).forEach(function (k) {
+      var row = findBy_(rows, 'key', k);
+      if (row) { row.value = clean[k]; updateRow_('Settings', row); } else add.push({ key: k, value: clean[k] });
+    });
+    appendRows_('Settings', add);
+    clearCaches_();
+    return getSettings_();
+  });
+}

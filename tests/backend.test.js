@@ -90,12 +90,23 @@ function makeEnv(uiAnswers) {
       getFoldersByName: (n) => iter(f.children.filter(x => x.name === n && x.kind === 'folder')),
       createFolder: (n) => { const c = newFolder(n, f); c.kind = 'folder'; f.children.push(c); return c; },
       getFilesByName: (n) => iter(f.children.filter(x => x.kind === 'file' && x.name === n && !x.trashed)),
+      createFile: (blob) => {
+        const file = { kind: 'file', id: 'file' + (++idn), name: blob.getName(), blob, trashed: false, created: new Date(),
+          getId() { return this.id; }, getName() { return this.name; }, getBlob() { return this.blob; },
+          getThumbnail() { return thumbsWork ? newBlob(this.blob.getBytes().slice(0, 10), 'image/png', 'thumb') : null; },
+          setTrashed(v) { this.trashed = v; }, isTrashed() { return this.trashed; }, getDateCreated() { return this.created; }, getUrl() { return 'https://drive/' + this.id; } };
+        f.children.push(file); files[file.id] = file; return file;
+      },
       getFiles: () => iter(f.children.filter(x => x.kind === 'file' && !x.trashed))
     };
     files[f.id] = f;
     return f;
   };
   const iter = (arr) => { let i = 0; return { hasNext: () => i < arr.length, next: () => arr[i++] }; };
+  const newBlob = (bytes, mime, name) => ({ getBytes: () => bytes.slice(), getContentType: () => mime, getName: () => name });
+  let thumbsWork = true;
+  const mail = [];
+  let mailWorks = true;
   const root = newFolder('My Drive');
   const ss = {
     getId: () => 'ss1', getUrl: () => 'https://docs.google.com/spreadsheets/d/ss1', tz: '',
@@ -136,6 +147,9 @@ function makeEnv(uiAnswers) {
       getUuid: () => crypto.randomUUID(),
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
       computeDigest: (alg, str) => Array.from(crypto.createHash('sha256').update(str, 'utf8').digest()).map(b => (b > 127 ? b - 256 : b)),
+      base64Decode: (str) => Array.from(Buffer.from(str, 'base64')).map(b => (b > 127 ? b - 256 : b)),
+      base64Encode: (bytes) => Buffer.from(bytes.map(b => b & 255)).toString('base64'),
+      newBlob: (bytes, mime, name) => newBlob(bytes, mime, name),
       base64EncodeWebSafe: (bytes) => Buffer.from(bytes.map(b => b & 255)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
       formatDate: (d, tz, pat) => {
         const t = new Date(d.getTime() - 7 * 3600e3); const p = n => String(n).padStart(2, '0');
@@ -157,13 +171,17 @@ function makeEnv(uiAnswers) {
       getRootFolder: () => root,
       createFolder: (n) => { const f = root.createFolder(n); return f; },
       getFolderById: (id) => { if (!files[id]) throw new Error('no folder'); return files[id]; },
-      getFileById: () => ({
+      getFileById: (id) => (files[id] && files[id].kind === 'file' ? files[id] : {
         makeCopy: (name, folder) => {
           const f = { kind: 'file', name, trashed: false, created: new Date(), getName: () => name, getUrl: () => 'https://drive/' + name,
             getDateCreated: () => f.created, setTrashed: (v) => { f.trashed = v; } };
           folder.children.push(f); return f;
         }
       })
+    },
+    MailApp: {
+      sendEmail: (o) => { if (!mailWorks) throw new Error('Authorization is required to perform that action.'); mail.push(o); },
+      getRemainingDailyQuota: () => 100
     }
   };
   vm.createContext(ctx);
@@ -171,7 +189,8 @@ function makeEnv(uiAnswers) {
   const code = fs.readdirSync(dir).filter(f => f.endsWith('.gs')).sort()
     .map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n');
   vm.runInContext(code, ctx, { filename: 'apps-script.gs' });
-  return { ctx, ss, sheets, props, cache, triggers, ui, root, answers };
+  return { ctx, ss, sheets, props, cache, triggers, ui, root, answers, mail, files,
+    setMailWorks: (v) => { mailWorks = v; }, setThumbsWork: (v) => { thumbsWork = v; } };
 }
 
 // When required from another script (for example a local fake server), just export the fakes.
@@ -261,7 +280,7 @@ test('setup is safe to re-run (no duplicates, keeps passcode)', () => {
   const before = env.props.PASSCODE_HASH;
   env.answers.push('NO');
   env.ctx.setup();
-  eq(table('Products').length, 3); eq(table('Patches').length, 45); eq(table('Settings').length, 20);
+  eq(table('Products').length, 3); eq(table('Patches').length, 45); eq(table('Settings').length, 21);
   eq(env.triggers.length, 1); eq(env.props.PASSCODE_HASH, before);
   eq(env.root.children.filter(c => c.name === 'TR Orders').length, 1);
 });
@@ -919,6 +938,136 @@ test('convert to invoice, mark approved, renew and duplicate', () => {
   eq(dup.doc.type, 'invoice'); eq(dup.doc.status, 'draft'); eq(dup.doc.paid_cents, 0); eq(dup.doc.total_cents, 34100);
   ok(dup.doc.number !== inv6.doc.number); ok(dup.items[0].item_id !== inv6.items[0].item_id);
   eq(dup.payments.length, 0); eq(dup.progress[0].steps.filter(s => s.done_at).length, 0);
+});
+
+/* ---------------- milestone 7: dashboard, emails, photos, settings ---------------- */
+
+const t7 = tok();
+test('bootstrap remembers the app address for email links (valid URLs only)', () => {
+  call(env, 'bootstrap', { app_url: 'javascript:alert(1)//' }, t7);
+  ok(!env.props.APP_URL, 'bad url ignored');
+  call(env, 'bootstrap', { app_url: 'https://terrireneedesigns.github.io/tr-orders/' }, t7);
+  eq(env.props.APP_URL, 'https://terrireneedesigns.github.io/tr-orders/');
+  eq(call(env, 'dashboard.get', {}).error.code, 'AUTH');
+});
+
+test('approval emails the business inbox with total, new invoice and a link (acceptance 16)', () => {
+  env.mail.length = 0;
+  const q = call(env, 'docs.save', docPayload({ type: 'quote' }), t7).data;
+  call(env, 'docs.markSent', { doc_id: q.doc.doc_id }, t7);
+  const r = call(env, 'public.approveQuote', { public_id: q.doc.public_id, name: 'Gloria Hayes', terms_accepted: true });
+  eq(r.ok, true);
+  eq(env.mail.length, 1);
+  const m = env.mail[0];
+  eq(m.to, 'terrireneedesigns@gmail.com'); eq(m.subject, '✅ ' + q.doc.number + ' approved by Gloria Hayes');
+  ok(m.body.indexOf('Total: $275.00') !== -1, m.body);
+  ok(m.body.indexOf('New invoice: ' + r.data.doc.number) !== -1);
+  ok(m.body.indexOf('https://terrireneedesigns.github.io/tr-orders/index.html#/orders/' + r.data.doc.number) !== -1);
+});
+
+test('if email is not allowed yet, approving and declining still work', () => {
+  env.setMailWorks(false); env.mail.length = 0;
+  const q = call(env, 'docs.save', docPayload({ type: 'quote' }), t7).data;
+  call(env, 'docs.markSent', { doc_id: q.doc.doc_id }, t7);
+  eq(call(env, 'public.approveQuote', { public_id: q.doc.public_id, name: 'A B', terms_accepted: true }).ok, true);
+  const q2 = call(env, 'docs.save', docPayload({ type: 'quote' }), t7).data;
+  call(env, 'docs.markSent', { doc_id: q2.doc.doc_id }, t7);
+  eq(call(env, 'public.declineQuote', { public_id: q2.doc.public_id }).ok, true);
+  eq(env.mail.length, 0);
+  env.setMailWorks(true);
+});
+
+test('decline email includes the note', () => {
+  env.mail.length = 0;
+  const q = call(env, 'docs.save', docPayload({ type: 'quote' }), t7).data;
+  call(env, 'docs.markSent', { doc_id: q.doc.doc_id }, t7);
+  call(env, 'public.declineQuote', { public_id: q.doc.public_id, note: 'Maybe next year' });
+  eq(env.mail[0].subject, q.doc.number + ' declined'); ok(env.mail[0].body.indexOf('"Maybe next year"') !== -1);
+});
+
+test('dashboard: needs-attention lists and snapshot numbers (SPEC 6.2)', () => {
+  const d = call(env, 'dashboard.get', {}, t7).data;
+  ['not_sent', 'overdue', 'ready_late', 'quotes_expiring', 'quotes_waiting'].forEach(k => ok(Array.isArray(d.needs[k]), k));
+  ok(d.needs.not_sent.length > 0, 'drafts with items are not sent');
+  ok(d.needs.overdue.some(r => r.amount_due_cents > 0), 'the 8-days-ago invoice is overdue');
+  ok(!('internal_notes' in (d.needs.not_sent[0] || {})));
+  // snapshot is computed from documents and payments
+  const docs = table('Documents'), pays = table('Payments');
+  const unpaid = docs.filter(x => x.type === 'invoice' && x.status === 'issued' && x.stage !== 'cancelled')
+    .reduce((t, x) => t + vm.runInContext('amountDueNow_', env.ctx)(x), 0);
+  eq(d.snapshot.unpaid_total_cents, unpaid);
+  eq(d.snapshot.in_progress, docs.filter(x => x.type === 'invoice' && x.status === 'issued' && x.stage === 'in_progress').length);
+  const month = d.month; const live = new Set(docs.filter(x => x.status !== 'void').map(x => x.doc_id));
+  eq(d.snapshot.collected_month_cents, pays.filter(p => !p.voided && live.has(p.doc_id) && p.paid_on.slice(0, 7) === month).reduce((t, p) => t + p.amount_cents, 0));
+  eq(d.snapshot.ready, docs.filter(x => x.type === 'invoice' && x.status === 'issued' && x.stage === 'ready').length);
+});
+
+test('daily digest: off by default; when on, emails overdue and ready 3+ days only if there is any', () => {
+  env.mail.length = 0;
+  eq(env.ctx.dailyDigest(), 'off');
+  eq(call(env, 'settings.save', { values: { daily_digest: 'on' } }, t7).data.daily_digest, 'on');
+  eq(env.ctx.dailyDigest(), 'sent');
+  ok(/need attention$/.test(env.mail[0].subject)); ok(env.mail[0].body.indexOf('Unpaid, overdue') !== -1);
+  call(env, 'settings.save', { values: { daily_digest: 'off' } }, t7);
+});
+
+test('setupNotifications schedules the 8 AM digest once', () => {
+  env.ctx.setupNotifications(); env.ctx.setupNotifications();
+  const t = env.triggers.filter(x => x.fn === 'dailyDigest'); eq(t.length, 1); eq(t[0].hour, 8);
+  eq(env.triggers.filter(x => x.fn === 'nightlyBackup').length, 1, 'backup trigger untouched');
+});
+
+test('settings.save: validates, refuses numbering and unknown keys, saves terms', () => {
+  eq(call(env, 'settings.save', { values: { next_order_no: '1' } }, t7).error.message, 'That setting can\'t be changed here.');
+  eq(call(env, 'settings.save', { values: { unpaid_flag_days: 0 } }, t7).error.code, 'VALIDATION');
+  eq(call(env, 'settings.save', { values: { notify_email: 'nope' } }, t7).error.code, 'VALIDATION');
+  eq(call(env, 'settings.save', { values: { business_name: '' } }, t7).error.message, 'Business name is required.');
+  const s = call(env, 'settings.save', { values: { unpaid_flag_days: 10, terms: [{ title: 'Payment', text: 'Due at order.' }] } }, t7).data;
+  eq(s.unpaid_flag_days, 10); eq(s.terms, [{ title: 'Payment', text: 'Due at order.' }]);
+  call(env, 'settings.save', { values: { unpaid_flag_days: 7, terms: vm.runInContext('SEED_TERMS', env.ctx) } }, t7);
+  eq(vm.runInContext('getSettings_()', env.ctx).terms.length, 8);
+});
+
+const tinyJpeg = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+let photoDoc, photoId;
+test('photos: upload to the order folder, list, get full and thumbnail, delete', () => {
+  photoDoc = call(env, 'docs.save', docPayload(), t7).data;
+  const r = call(env, 'photos.upload', { doc_id: photoDoc.doc.doc_id, data: 'data:image/jpeg;base64,' + tinyJpeg, caption: 'Back patch layout' }, t7);
+  eq(r.ok, true, JSON.stringify(r.error)); eq(r.data.photos.length, 1); photoId = r.data.photos[0].photo_id;
+  eq(r.data.photos[0].caption, 'Back patch layout');
+  const orderFolder = env.root.children.find(c => c.name === 'TR Orders').children.find(c => c.name === 'Order Photos').children.find(c => c.name === photoDoc.doc.number);
+  ok(orderFolder, 'folder named after the order number'); eq(orderFolder.children.length, 1);
+  const full = call(env, 'photos.get', { photo_id: photoId }, t7).data;
+  eq(full.mime, 'image/jpeg'); eq(full.data, tinyJpeg);
+  eq(call(env, 'photos.get', { photo_id: photoId, thumb: true }, t7).data.mime, 'image/png');
+  env.setThumbsWork(false);
+  eq(call(env, 'photos.get', { photo_id: photoId, thumb: true }, t7).data.mime, 'image/jpeg', 'no thumbnail yet: full image');
+  env.setThumbsWork(true);
+  eq(call(env, 'docs.get', { doc_id: photoDoc.doc.doc_id }, t7).data.photos.length, 1);
+  const del = call(env, 'photos.delete', { photo_id: photoId }, t7).data;
+  eq(del.photos.length, 0); ok(orderFolder.children[0].trashed, 'file in Drive trash');
+  eq(call(env, 'photos.delete', { photo_id: photoId }, t7).error.code, 'NOT_FOUND');
+});
+
+test('photos: refuse non-images, oversize data, void orders; never on the customer page', () => {
+  eq(call(env, 'photos.upload', { doc_id: photoDoc.doc.doc_id, data: 'data:text/html;base64,PGh0bWw+' }, t7).error.code, 'VALIDATION');
+  eq(call(env, 'photos.upload', { doc_id: photoDoc.doc.doc_id, data: 'not base64 !!' }, t7).error.code, 'VALIDATION');
+  call(env, 'photos.upload', { doc_id: photoDoc.doc.doc_id, data: tinyJpeg }, t7);
+  call(env, 'docs.markSent', { doc_id: photoDoc.doc.doc_id }, t7);
+  const pubv = JSON.stringify(call(env, 'public.getDocument', { public_id: photoDoc.doc.public_id, preview: true }).data);
+  ok(pubv.indexOf('drive_file_id') === -1 && pubv.indexOf('photo_id') === -1 && pubv.indexOf(tinyJpeg.slice(0, 20)) === -1);
+  eq(call(env, 'photos.get', { photo_id: 'PH_nope' }, t7).error.code, 'NOT_FOUND');
+});
+
+test('patch photo: upload replaces the old one and shows on the catalog', () => {
+  const a = call(env, 'photos.upload', { patch_no: '30', data: tinyJpeg }, t7).data;
+  const p30 = a.catalog.patches.find(p => p.patch_no === '30'); ok(p30.photo_file_id);
+  const first = p30.photo_file_id;
+  const b = call(env, 'photos.upload', { patch_no: '30', data: tinyJpeg }, t7).data;
+  ok(b.catalog.patches.find(p => p.patch_no === '30').photo_file_id !== first);
+  ok(env.files[first].trashed, 'old patch photo trashed');
+  eq(call(env, 'photos.get', { patch_no: '30' }, t7).data.data, tinyJpeg);
+  eq(call(env, 'photos.upload', { patch_no: '999', data: tinyJpeg }, t7).error.code, 'NOT_FOUND');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

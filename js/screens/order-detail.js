@@ -1,7 +1,7 @@
 // screens/order-detail.js: one quote or invoice (SPEC 6.5). Header with status and flags,
 // actions that depend on the state (send, record payment, mark ready, picked up, convert...),
 // progress checklist per item, payments, items and details, and the activity timeline.
-import { h, formatDate, formatDateTime, setChildren, confirmDialog, toast, showError, copyToClipboard, showTextToCopy } from '../ui.js';
+import { h, formatDate, formatDateTime, setChildren, confirmDialog, toast, showError, copyToClipboard, showTextToCopy, sheet } from '../ui.js';
 import { call } from '../api.js';
 import { store, upsertCustomer } from '../store.js';
 import { navigate } from '../router.js';
@@ -10,6 +10,7 @@ import { INCLUDED_SPOTS, extraLabel } from '../rules.js';
 import { statusBadges } from './orders.js';
 import { sendMessage, recordShared, customerLink } from '../share.js';
 import { recordPaymentSheet, reasonSheet, stageSheet, moreSheet, offerSheet } from './order-actions.js';
+import { pickPhoto, resizePhoto, photoSrc } from '../photos.js';
 
 export { customerLink };
 
@@ -252,6 +253,63 @@ export default {
         d.paid_cents > d.total_cents ? h('p', { class: 'note-warn' }, 'Paid ' + formatCents(d.paid_cents - d.total_cents) + ' more than the total.') : null);
     };
 
+    /* ----- photos (private; never on the customer page) ----- */
+    const addPhoto = async (btn) => {
+      const file = await pickPhoto();
+      if (!file) return;
+      const old = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Uploading…';
+      try {
+        const data = await resizePhoto(file);
+        const r = await call('photos.upload', { doc_id: res.doc.doc_id, data });
+        res.photos = r.photos;
+        toast('Photo added');
+        draw();
+      } catch (err) {
+        showError(err);
+        btn.disabled = false;
+        btn.textContent = old;
+      }
+    };
+
+    const viewPhoto = (p) => {
+      sheet((close) => {
+        const img = h('img', { class: 'photo-full', alt: p.caption || 'Order photo' });
+        const wrap = h('div', { class: 'photo-full-wrap' }, h('div', { class: 'spinner', 'aria-label': 'Loading' }));
+        photoSrc({ photo_id: p.photo_id }).then((src) => { img.src = src; setChildren(wrap, img); })
+          .catch((err) => setChildren(wrap, h('p', { class: 'muted' }, err.message)));
+        const del = h('button', { type: 'button', class: 'btn btn-danger btn-block' }, 'Delete photo');
+        del.addEventListener('click', async () => {
+          if (!(await confirmDialog({ title: 'Delete this photo?', message: 'It moves to the Drive trash.', yes: 'Delete', danger: true }))) return;
+          try {
+            const r = await call('photos.delete', { photo_id: p.photo_id });
+            res.photos = r.photos;
+            close();
+            toast('Photo deleted');
+            draw();
+          } catch (err) { showError(err); }
+        });
+        return [h('h2', null, p.caption || 'Photo'), wrap,
+          h('p', { class: 'small muted' }, 'Added ' + formatDateTime(p.created_at)),
+          h('div', { class: 'actions' }, del, h('button', { type: 'button', class: 'btn btn-secondary btn-block', onclick: () => close() }, 'Close'))];
+      });
+    };
+
+    const photosSection = () => {
+      const photos = res.photos || [];
+      const addBtn = h('button', { type: 'button', class: 'btn btn-secondary btn-block' }, '+ Add photo');
+      addBtn.addEventListener('click', () => addPhoto(addBtn));
+      return h('section', { class: 'section' },
+        h('h2', { class: 'label' }, 'Photos'),
+        photos.length ? h('div', { class: 'photo-grid' }, photos.map((p) => {
+          const img = h('img', { alt: p.caption || 'Order photo', loading: 'lazy' });
+          photoSrc({ photo_id: p.photo_id }, true).then((src) => { img.src = src; }).catch(() => { img.alt = 'Photo unavailable'; });
+          return h('button', { type: 'button', class: 'photo-thumb', 'aria-label': 'Open photo' + (p.caption ? ': ' + p.caption : ''), onclick: () => viewPhoto(p) }, img);
+        })) : h('p', { class: 'muted small' }, 'Reference photos stay private. Customers never see them.'),
+        res.doc.status !== 'void' ? addBtn : null);
+    };
+
     const activitySection = () => res.log.length ? h('section', { class: 'section' },
       h('h2', { class: 'label' }, 'Activity'),
       h('ul', { class: 'timeline' }, res.log.map((l) => h('li', null,
@@ -307,6 +365,7 @@ export default {
 
         d.customer_note ? h('section', { class: 'section' }, h('h2', { class: 'label' }, 'Note to customer'), h('p', { class: 'card notes' }, d.customer_note)) : null,
         d.internal_notes ? h('section', { class: 'section' }, h('h2', { class: 'label' }, 'Internal notes'), h('p', { class: 'card notes' }, d.internal_notes)) : null,
+        photosSection(),
         activitySection());
 
       // Coming from "Save & Send": offer to send now (a fresh tap opens the share menu).

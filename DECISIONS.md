@@ -112,3 +112,17 @@ Choices made where SPEC.md left room, newest milestone last.
 2. **Fix:** the app now asks for a new version whenever it comes back on screen (and every 30 minutes while open). A new version downloads every file fresh and takes over; the app then reloads itself. If an order is being edited or a sheet is open, it shows an "Update ready" banner with Refresh instead of reloading.
 3. **Every release raises `VERSION` in `sw.js`** (same as `APP_VERSION`). A changed `sw.js` is how phones notice a release.
 4. Phones still on 0.6.0 or older get this fix the old way, once: close the app fully and open it again.
+
+## Milestone 7: dashboard, emails, photos, backups
+
+1. **Needs attention order:** most urgent first: Unpaid overdue, Ready 3+ days, Not sent, Quotes expiring soon, Quotes waiting (SPEC 6.2 lists the same groups). A quote expiring soon shows only under "expiring", not also under "waiting". Each group shows 5 rows, then "and N more" opens the Orders list.
+2. **Snapshot:** Unpaid total = amount due now on issued invoices (not drafts, cancelled or void). Collected this month = payments (not void, on orders that aren't void) dated this month in Phoenix. Each card opens the matching Orders filter.
+3. **Emails never block anything.** They are sent after the approval or decline is saved, and any email error is only logged. Until `setupNotifications` is run once (permission to send email), emails are skipped quietly.
+4. **Email links:** the back end learns the app's address from the signed-in app on start (stored in Script Properties as APP_URL), so links in emails always point at the real app. Addresses from the customer page are never used.
+5. **Daily summary** (SPEC 9): off by default. `setupNotifications` schedules it for about 8 AM; it only emails when it's on and there is something overdue or ready 3+ days.
+6. **Photos are order-level.** The order editor's details form points to the order page ("Add photos on the order page after saving"), which keeps the editor simple and works for drafts too. `item_id` is stored when given, for later.
+7. **Photos are shrunk on the phone** to at most 1600 px JPEG at 0.8 quality (patch photos 1000 px). They are stored in Drive under TR Orders/Order Photos/<order number>/ and TR Orders/Patch Photos/, never shared. The grid uses Drive's own thumbnails, falling back to the full photo while Drive is still making one.
+8. **Deleting a photo** moves the file to the Drive trash and removes its row (the Photos tab has no "active" column; the file can still be recovered from the trash for 30 days).
+9. **settings.save** checks every key against an allow-list with plain-words validation; the numbering keys (`next_quote_no`, `next_order_no`) can't be changed from the app. Only the daily summary switch uses it so far; the full Settings editor (SPEC 6.10: business info, Zelle, rule days, templates, terms, change passcode) is the remaining piece and fits milestone 8.
+10. **Back up now** runs the same backup as the nightly one and shows a link to the copy.
+11. **New Apps Script files:** `Dashboard.gs`, `Notify.gs`, `Photos.gs`.
