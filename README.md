@@ -7,14 +7,21 @@ Quote, invoice and order app for **Terri Renee Evolvé**. The full plan is in [S
 - **Data:** the Google Sheet (one tab per table). Photos and backups in the Google Drive folder "TR Orders".
 - **Cost:** $0.
 
-**Status:**
-- Milestone 1 (Google setup and back end skeleton) is done: `setup()`, the `doPost` router, `auth.login` and `bootstrap`, with a test page.
-- Milestone 2 (front end shell) is done: sign-in screen, Home and the five tabs, Home Screen app setup, offline app shell.
-- Milestone 3 (catalog and customers) is done: add and edit products, packages and their price lines, add-ons and patches; customers list, detail, add and edit, with a duplicate check.
-- Milestone 4 (order editor) is done: create and edit quotes and invoices with package lines, add-ons, the jacket details form and patch picker, the left-sleeve, extra-patch and tier rules, totals, a local draft that survives closing the app, and numbering (Q-1001, TR-1001). Orders list with filters and search.
-- Milestone 5 (customer page) is done: `view.html` shows the quote or invoice with the Zelle QR and cash panel, payment history, the True Value Statement, Save as PDF, and quote Approve / Decline (approving turns the quote into an invoice on the spot). Views are tracked; Terri's previews don't count. The order page has Preview, Copy link and Mark as sent.
-- Milestone 6 (sending, payments and progress) is done: Send through the iPhone share menu with "Did you send it?" (Copy / Text / Email on computers), Save & Send, record and void payments with a receipt offer, stages (In progress, Ready, Picked up / Delivered, Cancelled), shop checklists per item with "Mark order Ready?" and "Completed?" prompts, Convert to invoice, Mark approved, Renew, Duplicate, Void, and the activity timeline. 
-- Milestone 7 (dashboard, emails, photos, backups) is done: Home shows Needs attention (overdue, ready 3+ days, not sent, quotes expiring, quotes waiting) and the snapshot numbers; emails to the business inbox when a quote is approved or declined, plus an optional 8 AM summary; private order photos and patch photos; Back up now in Settings. **One-time step:** run `setupNotifications` in Apps Script (Part 2B).
+**Live:** app at <https://terrireneedesigns.github.io/tr-orders/> · customer pages at `…/view.html?id=…` · back end is the "TR Orders API" Apps Script deployment.
+
+**For Terri:** see [INSTALL-IPHONE.md](INSTALL-IPHONE.md), a one-page guide with screenshots.
+
+**Status:** all 8 milestones in SPEC section 15 are built:
+1. Google setup and back end skeleton
+2. Front end shell (Home Screen app, offline copy, updates itself)
+3. Catalog and customers
+4. Order editor (packages, add-ons, jacket details, patch picker, the jacket rules, local draft)
+5. Customer page (Zelle and cash panel, terms, approve or decline, Save as PDF)
+6. Sending, payments and progress (share menu, receipts, stages, checklists, activity)
+7. Home dashboard, emails, photos, backups
+8. Settings editing, contrast and accessibility pass, launch clean-up, iPhone guide
+
+See [Acceptance tests](#acceptance-tests) for how each check in SPEC section 16 was covered, and [Going live](#going-live-checklist) for what's left before real orders.
 
 ---
 
@@ -195,10 +202,52 @@ Editing the Sheet by hand is fine (for example fixing a typo in a patch name). T
 
 ---
 
+## Going live checklist
+
+1. **Clear the test orders.** In Apps Script, open **Setup.gs**, choose **clearTestOrders**, click **Run**, and answer in the Sheet's tab (type `CLEAR`). It saves a backup first, removes every quote, invoice, payment, checklist tick, order photo and activity entry, restarts numbering at Q-1001 and TR-1001, and asks whether to remove customers too. Products, patches, settings and sign-ins stay.
+2. **Emails:** make sure `setupNotifications` has been run once (Part 2B). Approve a test quote before step 1 to see the email arrive.
+3. **Each phone:** add TR Orders to the Home Screen from Safari and sign in ([INSTALL-IPHONE.md](INSTALL-IPHONE.md)). Settings shows the app version at the bottom.
+4. **Still open (SPEC 17):**
+   - Price lines for hats and purses: Catalog > product > Custom package > add lines (until then, add lines on each order).
+   - Patch photos (optional): Catalog > Patches > a patch > Add photo.
+   - Custom domain (later): point `invoices.terrireneedesigns.com` at GitHub Pages; nothing in the code needs to change (links are worked out from where the app runs).
+
+---
+
+## Acceptance tests
+
+SPEC section 16, and how each was checked. **Auto** = in `node tests/backend.test.js` (79 tests) or `tests/rules.test.html` (66 tests). **Browser** = clicked through at iPhone size against the fake back end. **iPhone** = still to try on a real phone.
+
+| # | Scenario | Checked by |
+|---|---|---|
+| 1-3 | Standard $275, Premium $335, Collector's $405 | Auto (both), Browser |
+| 4 | Standard + 2 extra small + left sleeve = $341 | Auto, Browser |
+| 5 | Left sleeve added once, removed on Right | Auto, Browser |
+| 6 | 4th extra patch warns, still allowed | Auto, Browser |
+| 7 | Premium No. 30 on Standard: soft warning | Auto, Browser |
+| 8 | Qty 2 Standard = $550 | Auto, Browser |
+| 9 | 100% upfront: "Total due $341.00", no balance wording | Auto, Browser |
+| 10 | 50% of $341.01: due now $170.51 | Auto, Browser |
+| 11 | $341 Zelle payment: Paid in full, In progress, step 1, receipt offered | Auto, Browser |
+| 12 | Sent 8 days ago, unpaid: Overdue | Auto |
+| 13 | Ready 4 days ago: Ready 3+ days | Auto |
+| 14 | Share then "Not yet": still Not sent | Auto, Browser (computer fallback); **iPhone** for the share menu itself |
+| 15 | Customer opens link: Viewed; Terri's preview doesn't count | Auto, Browser |
+| 16 | Customer approves: converted, invoice shown in place, email sent | Auto, Browser; **iPhone/Gmail** for the real email |
+| 17 | Quote older than 30 days: expired, no Approve | Auto |
+| 18 | Draft or bad link: "no longer active", nothing leaked | Auto, Browser, live site |
+| 19 | 11 wrong passcodes: locked 15 minutes | Auto |
+| 20 | Customer page has no internal notes, other customers or photos | Auto |
+| 21 | Backup: dated copy, older than 30 days removed | Auto, Browser (Back up now) |
+
+Still to try on a real iPhone: the share menu (14), the approval email arriving (16), taking a photo with the camera, and Home Screen mode after an update.
+
+---
+
 ## For developers
 
 - Back end tests (no npm packages needed): `node tests/backend.test.js`. They run the real `.gs` files against small fakes of the Google services.
-- Local app with a fake back end: `node tests/dev-server.js`, then open <http://localhost:8080/tr-orders/> (fake passcode `123456`, data resets on restart). It serves `js/config.js` pointed at the fake without changing the file. On localhost the service worker loads from the network first, so edits show on reload.
+- Local app with a fake back end: `node tests/dev-server.js`, then open <http://localhost:8080/tr-orders/> (fake passcode `123456`, data resets on restart). <http://localhost:8080/dev/open?to=/home> signs in with sample orders (`?view=invoice` or `?view=quote` opens a customer page); the screenshots in `docs/screenshots/` were taken this way at 375×812. It serves `js/config.js` pointed at the fake without changing the file. On localhost the service worker loads from the network first, so edits show on reload.
 - Replacing a logo: the app shell uses smaller copies, `assets/logo-full-sm.png` (480 px wide) and `assets/logo-monogram-sm.png` (160 px wide). After replacing `logo-full.png` or `logo-monogram.png`, make new small copies (macOS: `sips -Z 480 logo-full.png --out logo-full-sm.png` and `sips -Z 160 logo-monogram.png --out logo-monogram-sm.png`), or just copy the new file over the `-sm` name. No code changes needed either way.
 - API: POST `{ action, token, payload }` as `text/plain;charset=utf-8` (not `application/json`, which triggers a CORS preflight that Apps Script cannot answer). Responses are `{ ok: true, data }` or `{ ok: false, error: { code, message } }`, where `message` is safe to show as is.
 - Actions so far: `ping`, `auth.login`, `auth.logout`, `auth.logoutAll`, `auth.changePasscode`, `bootstrap`, `backup.run`, `customers.save` / `get` / `list`, `catalog.saveProduct` / `savePackage` / `saveTemplateLines` / `saveAddOn` / `savePatch` / `reorder`, `docs.save` / `get` / `list` / `markSent` / `setStage` / `void` / `markApproved` / `convertToInvoice` / `renewQuote` / `duplicate`, `checklist.toggle`, `payments.add` / `void`, `dashboard.get`, `settings.save`, `photos.upload` / `get` / `delete`, and the public (no sign-in) `public.getDocument` / `approveQuote` / `declineQuote`.

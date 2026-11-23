@@ -7,7 +7,7 @@
  *   { "ok": true, "data": ... }  or  { "ok": false, "error": { "code", "message" } }
  */
 
-var API_VERSION = '0.7.0';
+var API_VERSION = '0.8.0';
 var SESSION_DAYS = 180;
 var LOGIN_MAX_FAILS = 10;
 var LOGIN_WINDOW_MS = 15 * 60 * 1000;

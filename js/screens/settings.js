@@ -1,5 +1,5 @@
-// screens/settings.js: Settings tab. Business info (read-only for now), Google Sheet link,
-// sign out, sign out all devices, app version.
+// screens/settings.js: Settings tab (SPEC 6.10). Links to the editing screens (settings-edit.js),
+// emails, data (Sheet, Back up now), sign out, sign out all devices, app version.
 import { APP_VERSION } from '../config.js';
 import { call, clearToken } from '../api.js';
 import { h, confirmDialog, toast, setChildren, toggleRow, showError, formatDateTime } from '../ui.js';
@@ -16,12 +16,11 @@ export default {
         h('section', { class: 'section' },
           h('h2', { class: 'label' }, 'Business'),
           h('ul', { class: 'list' },
-            row('Name', s.business_name), row('Phone', s.phone), row('Email', s.email), row('Website', s.website))),
-
-        h('section', { class: 'section' },
-          h('h2', { class: 'label' }, 'Zelle'),
-          h('ul', { class: 'list' },
-            row('Send to', s.zelle_contact), row('Name shown', s.zelle_display_name))),
+            navRow('business', 'Business & Zelle', [s.business_name, 'Zelle ' + s.zelle_contact].join(' · ')),
+            navRow('rules', 'Rules & days', 'Overdue after ' + s.unpaid_flag_days + ' days · quotes last ' + s.quote_expiry_days + ' days'),
+            navRow('messages', 'Messages', 'What the texts and emails say'),
+            navRow('terms', s.terms_title || 'True Value Statement', (s.terms || []).length + ' items'),
+            navRow('passcode', 'Change passcode', 'Shared by Terri and Autumn'))),
 
         h('section', { class: 'section' },
           h('h2', { class: 'label' }, 'Emails'),
@@ -49,9 +48,10 @@ export default {
   }
 };
 
-function row(label, value) {
-  return h('li', null, h('div', { class: 'list-row' },
-    h('div', { class: 'grow' }, h('div', { class: 'small muted' }, label), h('div', null, value || '—'))));
+function navRow(section, label, sub) {
+  return h('li', null, h('a', { class: 'list-row', href: '#/settings/' + section },
+    h('div', { class: 'grow' }, h('div', null, label), sub ? h('div', { class: 'small muted' }, sub) : null),
+    h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')));
 }
 
 async function signOut() {

@@ -126,3 +126,13 @@ Choices made where SPEC.md left room, newest milestone last.
 9. **settings.save** checks every key against an allow-list with plain-words validation; the numbering keys (`next_quote_no`, `next_order_no`) can't be changed from the app. Only the daily summary switch uses it so far; the full Settings editor (SPEC 6.10: business info, Zelle, rule days, templates, terms, change passcode) is the remaining piece and fits milestone 8.
 10. **Back up now** runs the same backup as the nightly one and shows a link to the copy.
 11. **New Apps Script files:** `Dashboard.gs`, `Notify.gs`, `Photos.gs`.
+
+## Milestone 8: polish and handoff
+
+1. **Settings editing** (SPEC 6.10) lives on five small screens (Business & Zelle, Rules & days, Messages, True Value Statement, Change passcode) instead of one long form, so each save is short and easy to check. Messages show a live example with sample customer data. The Zelle QR is a picture file, so the Zelle screen reminds Terri to have it replaced if the Zelle number changes. Changing the passcode keeps already-signed-in phones signed in.
+2. **Contrast fixes (WCAG AA):** gold label text moved from #8A6A1E to **#80621A** (4.28:1 failed on the beige panels; now 4.84:1, and 5.29:1 on cream). Input and control borders use a new **--field #8A8072** token (the old #DDD6C8 was 1.45:1; now at least 3.29:1 against white, cream and panel), including the "off" switch. Every other text/background pair was measured and passes (ink on cream 15.7:1, gold on ink 8.1:1, muted on panel 5.0:1).
+3. **Tap targets:** filter chips, segmented buttons and the update banner button raised from 44 px to 48 px, so everything Terri taps is at least 48 px.
+4. **Keyboard and screen readers:** bottom sheets keep Tab inside them, close on Escape and are labelled by their heading; after moving to a screen, focus moves to the new content so VoiceOver starts there.
+5. **`clearTestOrders()`** (Setup.gs) is for going live after testing on the real Sheet. It only runs from the editor, makes a backup first, needs `CLEAR` typed, and asks separately before removing customers. Order photo folders go to the Drive trash. A deliberate step rather than an app button, because it can't be undone from the app.
+6. **Screenshots for INSTALL-IPHONE.md** were taken in the browser at iPhone size (375×812) using demo data from the dev server (`/dev/open`), then shrunk to 900 px tall JPEGs (about 300 KB in all). Safari's own Share and "Add to Home Screen" screens are described in words, since they can't be captured here.
+7. **Not done:** testing on a real iPhone (share menu, camera, Home Screen after an update) is listed as the remaining check in README "Acceptance tests".

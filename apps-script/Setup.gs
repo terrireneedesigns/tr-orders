@@ -331,3 +331,43 @@ var SEED_PATCHES = [
   ['44', 'Black and white square and compass with G', '3¾ × 3⅞ in', 'standard', G_SM],
   ['45', 'OES lady', '4 in', 'premium', G_LG]
 ];
+
+/* ---------- before going live: clear test orders ---------- */
+
+var ORDER_TABS = ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 'Photos', 'Log'];
+
+/**
+ * Run from the editor once testing is finished. Makes a backup copy first, then removes every
+ * quote, invoice, payment, checklist tick, order photo and activity entry, and restarts numbering
+ * at Q-1001 and TR-1001. Products, packages, patches, settings and sign-ins stay. Asks before
+ * removing customers too. Type CLEAR to confirm.
+ */
+function clearTestOrders() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Clear test orders',
+    'This removes ALL quotes, invoices, payments, checklists, order photos and activity, and restarts numbering at ' +
+    'Q-1001 and TR-1001. A backup copy is made first. Products, patches and settings stay.\n\nType CLEAR to continue.',
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK || r.getResponseText().trim() !== 'CLEAR') {
+    ui.alert('Clear test orders', 'Nothing was changed.', ui.ButtonSet.OK);
+    return 'cancelled';
+  }
+  var alsoCustomers = ui.alert('Customers', 'Also remove ALL customers?', ui.ButtonSet.YES_NO) === ui.Button.YES;
+  var backup = runBackup_();
+  withLock_(function () {
+    ORDER_TABS.concat(alsoCustomers ? ['Customers'] : []).forEach(function (t) { rewriteTable_(t, []); });
+    readTable_('Settings').forEach(function (row) {
+      if (row.key === 'next_quote_no' || row.key === 'next_order_no') { row.value = '1001'; updateRow_('Settings', row); }
+    });
+    clearCaches_();
+  });
+  var photos = existingFolder_(PropertiesService.getScriptProperties().getProperty('PHOTOS_FOLDER_ID'));
+  if (photos) {
+    var it = photos.getFolders();
+    while (it.hasNext()) it.next().setTrashed(true);
+  }
+  ui.alert('Test orders cleared',
+    'Orders removed' + (alsoCustomers ? ' and customers removed' : '') + '. The next quote will be Q-1001 and the next invoice TR-1001.\n\n' +
+    'A backup was saved first: ' + backup.name + ' (TR Orders/Backups).', ui.ButtonSet.OK);
+  return 'cleared';
+}

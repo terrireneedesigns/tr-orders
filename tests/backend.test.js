@@ -97,7 +97,9 @@ function makeEnv(uiAnswers) {
           setTrashed(v) { this.trashed = v; }, isTrashed() { return this.trashed; }, getDateCreated() { return this.created; }, getUrl() { return 'https://drive/' + this.id; } };
         f.children.push(file); files[file.id] = file; return file;
       },
-      getFiles: () => iter(f.children.filter(x => x.kind === 'file' && !x.trashed))
+      getFiles: () => iter(f.children.filter(x => x.kind === 'file' && !x.trashed)),
+      getFolders: () => iter(f.children.filter(x => x.kind === 'folder' && !x.trashed)),
+      setTrashed(v) { f.trashed = v; }
     };
     files[f.id] = f;
     return f;
@@ -121,9 +123,9 @@ function makeEnv(uiAnswers) {
     Button: { OK: 'OK', CANCEL: 'CANCEL', YES: 'YES', NO: 'NO' },
     ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL', YES_NO: 'YES_NO' },
     alerts: [],
-    alert: (title, msg) => {
+    alert: (title, msg, buttons) => {
       ui.alerts.push(title + ': ' + (msg || ''));
-      if (msg && msg.indexOf('Do you want to change it?') !== -1) return answers.shift();
+      if (buttons === 'YES_NO') return answers.shift();
       return 'OK';
     },
     prompt: () => { const a = answers.shift(); return { getSelectedButton: () => a === null ? 'CANCEL' : 'OK', getResponseText: () => a || '' }; }
@@ -1068,6 +1070,40 @@ test('patch photo: upload replaces the old one and shows on the catalog', () => 
   ok(env.files[first].trashed, 'old patch photo trashed');
   eq(call(env, 'photos.get', { patch_no: '30' }, t7).data.data, tinyJpeg);
   eq(call(env, 'photos.upload', { patch_no: '999', data: tinyJpeg }, t7).error.code, 'NOT_FOUND');
+});
+
+
+/* ---------------- milestone 8: settings editing, launch clean-up ---------------- */
+
+test('clearTestOrders: wrong word changes nothing', () => {
+  const before = table('Documents').length; ok(before > 0);
+  env.answers.push('clear please');
+  eq(env.ctx.clearTestOrders(), 'cancelled');
+  eq(table('Documents').length, before);
+});
+
+test('clearTestOrders: backup first, orders gone, numbering restarts, catalog/settings/customers kept', () => {
+  const backupsBefore = env.root.children.find(c => c.name === 'TR Orders').children.find(c => c.name === 'Backups').children.filter(f => !f.trashed).length;
+  const customers = table('Customers').length;
+  env.answers.push('CLEAR', 'NO');
+  eq(env.ctx.clearTestOrders(), 'cleared');
+  ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 'Photos', 'Log'].forEach(t => eq(table(t).length, 0, t));
+  eq(table('Customers').length, customers, 'customers kept');
+  eq(table('Patches').length > 40, true); eq(table('Products').length >= 3, true);
+  const s = vm.runInContext('getSettings_()', env.ctx); eq(s.next_quote_no, 1001); eq(s.next_order_no, 1001); eq(s.zelle_contact, '623-523-7472');
+  ok(env.root.children.find(c => c.name === 'TR Orders').children.find(c => c.name === 'Backups').children.filter(f => !f.trashed).length >= 1, 'backup exists');
+  const op = env.root.children.find(c => c.name === 'TR Orders').children.find(c => c.name === 'Order Photos');
+  ok(op.children.filter(c => c.kind === 'folder').every(c => c.trashed), 'order photo folders trashed');
+  // still works afterwards
+  const t8 = call(env, 'auth.login', { passcode: '654321' }).data.token;
+  eq(call(env, 'docs.save', docPayload(), t8).data.doc.number, 'TR-1001');
+  eq(call(env, 'docs.save', docPayload({ type: 'quote' }), t8).data.doc.number, 'Q-1001');
+});
+
+test('clearTestOrders can also remove customers', () => {
+  env.answers.push('CLEAR', 'YES');
+  env.ctx.clearTestOrders();
+  eq(table('Customers').length, 0); eq(table('Documents').length, 0);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

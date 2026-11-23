@@ -130,7 +130,7 @@ body { overscroll-behavior-y: none; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin: 0 calc(-1 * var(--gap)); padding-left: var(--gap); padding-right: var(--gap); scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
 .chip {
-  flex: none; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line);
+  flex: none; min-height: var(--tap); padding: 0 16px; border-radius: 999px; border: 1px solid var(--field);
   background: var(--white); color: var(--ink); font: 500 16px var(--font-body); cursor: pointer; white-space: nowrap;
 }
 .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--cream); }
@@ -172,7 +172,7 @@ body { overscroll-behavior-y: none; }
 .spot-card .toggle-row { min-height: 48px; padding: 0; }
 .patch-pick {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; min-height: var(--control); padding: 10px 14px;
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); color: var(--ink);
+  border: 1px solid var(--field); border-radius: var(--radius); background: var(--white); color: var(--ink);
   font: 400 17px var(--font-body); text-align: left; cursor: pointer;
 }
 .patch-pick .chev { margin-left: auto; color: var(--muted); font-size: 22px; }
@@ -226,7 +226,7 @@ body { overscroll-behavior-y: none; }
   background: var(--ink); color: var(--cream); border-radius: var(--radius); padding: 10px 12px 10px 16px;
   box-shadow: 0 6px 24px rgba(32, 28, 25, 0.3);
 }
-.update-banner .btn { min-height: 44px; padding: 0 16px; flex: none; }
+.update-banner .btn { min-height: var(--tap); padding: 0 16px; flex: none; }
 
 /* ---------- home dashboard, photos (milestone 7) ---------- */
 
@@ -243,3 +243,4 @@ body { overscroll-behavior-y: none; }
 .photo-full { width: 100%; height: auto; border-radius: var(--radius); }
 .patch-photo-wrap { margin-bottom: 8px; }
 .patch-photo { max-width: 160px; max-height: 160px; border-radius: var(--radius); display: block; }
+.app-main:focus { outline: none; }

@@ -95,10 +95,23 @@ export function sheet(build, { onClose } = {}) {
     if (prevFocus && prevFocus.focus) prevFocus.focus();
     if (onClose) onClose(result);
   };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  // Escape closes; Tab stays inside the sheet (keyboard and VoiceOver users don't wander behind it).
+  const onKey = (e) => {
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key !== 'Tab') return;
+    const items = [...panel.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
   document.addEventListener('keydown', onKey);
   appendAll(panel, [build(close)]);
+  const heading = panel.querySelector('h2');
+  if (heading) { heading.id = heading.id || 'sheet-title-' + Date.now(); panel.setAttribute('aria-labelledby', heading.id); }
   document.body.appendChild(backdrop);
   panel.focus();
   return { el: panel, close };
