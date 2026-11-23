@@ -121,7 +121,7 @@ export default {
         totalsSection(),
         notesSection(),
         moreOptions(),
-        h('div', { class: 'form-actions' }, saveButton()));
+        h('div', { class: 'form-actions two' }, saveButton(false), saveButton(true)));
       refreshTotals();
       window.scrollTo(0, y);
       if (opts.focusLast) {
@@ -245,17 +245,21 @@ export default {
     };
 
     // ----- save -----
-    const saveButton = () => {
-      const btn = h('button', { type: 'button', class: 'btn btn-block' }, state.type === 'quote' ? 'Save quote' : 'Save invoice');
+    const saveButton = (andSend) => {
+      const label = andSend ? 'Save & Send' : 'Save';
+      const btn = h('button', { type: 'button', class: andSend ? 'btn' : 'btn btn-secondary' }, label);
       btn.addEventListener('click', () => withBusy(btn, 'Saving…', async () => {
         const payload = buildPayload(state);
         const res = await call('docs.save', payload);
         clearTimeout(draftTimer);
         clearDraft(key);
         toast('Saved ' + res.doc.number);
+        const path = '/orders/' + encodeURIComponent(res.doc.number);
+        // Save & Send opens the order page, which offers "Send now" (the share menu needs a fresh tap).
+        if (andSend) navigate(path + '?send=1', { replace: true });
         // Editing: go back to the order page we came from. New: replace the editor with the order page.
-        if (state.doc_id) back('/orders/' + encodeURIComponent(res.doc.number));
-        else navigate('/orders/' + encodeURIComponent(res.doc.number), { replace: true });
+        else if (state.doc_id) back(path);
+        else navigate(path, { replace: true });
       }));
       return btn;
     };

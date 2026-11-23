@@ -211,6 +211,13 @@ function getDocById_(docId, docRow) {
   var customer = findBy_(readTable_('Customers'), 'customer_id', doc.customer_id);
   var now = Date.now();
   var out = clean_(doc);
+  var linked = function (id) {
+    var d = id ? findBy_(readTable_('Documents'), 'doc_id', id) : null;
+    return d ? d.number : '';
+  };
+  out.from_quote_number = linked(doc.from_quote_id);
+  out.converted_invoice_number = linked(doc.converted_invoice_id);
+  out.upfront_cents = upfrontCents_(doc.total_cents, doc.upfront_percent);
   out.effective_status = effectiveStatus_(doc, now);
   out.flags = docFlags_(doc, items.length, getSettings_(), now);
   out.amount_due_cents = amountDueNow_(doc);
@@ -220,9 +227,11 @@ function getDocById_(docId, docRow) {
     customer: customer ? clean_(customer) : null,
     items: items,
     payments: readTable_('Payments').filter(function (x) { return x.doc_id === docId; }).map(clean_),
-    checklist: readTable_('Checklist').filter(function (x) { return x.doc_id === docId; }).map(clean_),
+    progress: doc.type === 'invoice'
+      ? progressFor_(items, readTable_('Checklist').filter(function (x) { return x.doc_id === docId; }), getCatalog_().products)
+      : [],
     photos: readTable_('Photos').filter(function (x) { return x.doc_id === docId; }).map(clean_),
-    log: readTable_('Log').filter(function (x) { return x.doc_id === docId; }).map(clean_)
+    log: readTable_('Log').filter(function (x) { return x.doc_id === docId; }).map(clean_).reverse()
   };
 }
 
@@ -310,6 +319,41 @@ function markSent_(p) {
 }
 
 /**
+ * Copy one document's items and lines to another document id, with new ids.
+ * Extra patch spots that point at a price line are pointed at the copied line.
+ * Returns { items: [rows], lines: [rows], totals } (not yet written).
+ */
+function copyItems_(fromDocId, toDocId, discountCents) {
+  var items = readTable_('DocItems').filter(function (it) { return it.doc_id === fromDocId; }).sort(bySort_);
+  var lines = readTable_('DocLines').filter(function (l) { return l.doc_id === fromDocId; }).sort(bySort_);
+  var lineMap = {};
+  var outItems = [];
+  var outLines = [];
+  items.forEach(function (it) {
+    var itemId = newId_('I');
+    var mine = lines.filter(function (l) { return l.item_id === it.item_id; }).map(function (l) {
+      var lineId = newId_('L');
+      lineMap[l.line_id] = lineId;
+      return { line_id: lineId, item_id: itemId, doc_id: toDocId, label: l.label, amount_cents: l.amount_cents, kind: l.kind, addon_id: l.addon_id, sort: l.sort };
+    });
+    outItems.push({ item_id: itemId, doc_id: toDocId, product_id: it.product_id, package_id: it.package_id, title: it.title, qty: it.qty, sort: it.sort, details_json: it.details_json, _lines: mine });
+    outLines = outLines.concat(mine);
+  });
+  outItems.forEach(function (it) {
+    try {
+      var d = JSON.parse(it.details_json || '{}');
+      if (Array.isArray(d.spots)) {
+        d.spots.forEach(function (sp) { if (sp.line_id && lineMap[sp.line_id]) sp.line_id = lineMap[sp.line_id]; });
+        it.details_json = JSON.stringify(d);
+      }
+    } catch (err) { /* leave details as they were */ }
+  });
+  var totals = computeTotals_(outItems.map(function (it) { return { qty: it.qty, lines: it._lines }; }), discountCents);
+  outItems.forEach(function (it) { delete it._lines; });
+  return { items: outItems, lines: outLines, totals: totals };
+}
+
+/**
  * Turn a quote into a new invoice (call inside the lock). Copies items, lines, details, customer,
  * fulfillment, notes, discount and upfront percent, with a new TR- number and new ids.
  * opts.sentMethod: 'customer_approved' marks the invoice as already sent (the customer is looking at it).
@@ -317,8 +361,6 @@ function markSent_(p) {
  */
 function convertQuote_(quote, opts) {
   var now = nowIso_();
-  var items = readTable_('DocItems').filter(function (it) { return it.doc_id === quote.doc_id; }).sort(bySort_);
-  var lines = readTable_('DocLines').filter(function (l) { return l.doc_id === quote.doc_id; }).sort(bySort_);
   var invoice = {
     doc_id: newId_('D'), public_id: newPublicId_(), type: 'invoice', number: nextNumber_('invoice'),
     customer_id: quote.customer_id, status: opts.sentMethod ? 'issued' : 'draft', stage: 'awaiting_payment',
@@ -326,36 +368,15 @@ function convertQuote_(quote, opts) {
     sent_at: opts.sentMethod ? now : '', sent_method: opts.sentMethod || '',
     view_count: 0, from_quote_id: quote.doc_id, est_ready_date: quote.est_ready_date,
     upfront_percent: quote.upfront_percent || 100, discount_cents: quote.discount_cents || 0,
-    discount_label: quote.discount_label, subtotal_cents: quote.subtotal_cents, total_cents: quote.total_cents,
-    paid_cents: 0, customer_note: quote.customer_note, internal_notes: quote.internal_notes
+    discount_label: quote.discount_label, paid_cents: 0,
+    customer_note: quote.customer_note, internal_notes: quote.internal_notes
   };
-  var lineMap = {};
-  var newItems = items.map(function (it) {
-    var itemId = newId_('I');
-    var itemLines = lines.filter(function (l) { return l.item_id === it.item_id; }).map(function (l) {
-      var lineId = newId_('L');
-      lineMap[l.line_id] = lineId;
-      return { line_id: lineId, item_id: itemId, doc_id: invoice.doc_id, label: l.label, amount_cents: l.amount_cents, kind: l.kind, addon_id: l.addon_id, sort: l.sort };
-    });
-    return { row: { item_id: itemId, doc_id: invoice.doc_id, product_id: it.product_id, package_id: it.package_id, title: it.title, qty: it.qty, sort: it.sort, details_json: it.details_json }, lines: itemLines };
-  });
-  // Extra patch spots point at their price line; point them at the copied line.
-  newItems.forEach(function (ni) {
-    try {
-      var d = JSON.parse(ni.row.details_json || '{}');
-      if (Array.isArray(d.spots)) {
-        d.spots.forEach(function (s) { if (s.line_id && lineMap[s.line_id]) s.line_id = lineMap[s.line_id]; });
-        ni.row.details_json = JSON.stringify(d);
-      }
-    } catch (err) { /* leave details as they were */ }
-  });
-  var totals = computeTotals_(newItems.map(function (ni) { return { qty: ni.row.qty, lines: ni.lines }; }), invoice.discount_cents);
-  invoice.subtotal_cents = totals.subtotal_cents;
-  invoice.total_cents = totals.total_cents;
-
+  var copy = copyItems_(quote.doc_id, invoice.doc_id, invoice.discount_cents);
+  invoice.subtotal_cents = copy.totals.subtotal_cents;
+  invoice.total_cents = copy.totals.total_cents;
   appendRows_('Documents', [invoice]);
-  appendRows_('DocItems', newItems.map(function (ni) { return ni.row; }));
-  appendRows_('DocLines', [].concat.apply([], newItems.map(function (ni) { return ni.lines; })));
+  appendRows_('DocItems', copy.items);
+  appendRows_('DocLines', copy.lines);
 
   quote.status = 'converted';
   quote.converted_invoice_id = invoice.doc_id;
@@ -364,4 +385,162 @@ function convertQuote_(quote, opts) {
   logEvent_('converted', quote.doc_id, 'Became invoice ' + invoice.number);
   logEvent_('created', invoice.doc_id, 'Invoice ' + invoice.number + ' from quote ' + quote.number);
   return invoice;
+}
+
+/* ---------- order actions (SPEC 5.4, 5.5, 6.5) ---------- */
+
+var STAGES = ['awaiting_payment', 'in_progress', 'ready', 'completed', 'cancelled'];
+var STAGE_WORDS = { awaiting_payment: 'Awaiting payment', in_progress: 'In progress', ready: 'Ready', completed: 'Completed', cancelled: 'Cancelled' };
+
+/** Find a document for an action (inside the lock), refusing void ones. */
+function docForAction_(id, what) {
+  var doc = findBy_(readTable_('Documents'), 'doc_id', vId_(id, 'Order'));
+  if (!doc) throw appError('NOT_FOUND', 'That order no longer exists.');
+  if (doc.status === 'void') throw appError('VALIDATION', 'This order is void.');
+  if (what === 'invoice' && doc.type !== 'invoice') throw appError('VALIDATION', 'This only works on invoices.');
+  if (what === 'quote' && doc.type !== 'quote') throw appError('VALIDATION', 'This only works on quotes.');
+  return doc;
+}
+
+/** Move an invoice to a stage, setting ready_at / completed_at. Drafts become issued. (inside the lock) */
+function applyStage_(doc, stage, reason) {
+  var now = nowIso_();
+  if (doc.status === 'draft') doc.status = 'issued';
+  doc.stage = stage;
+  if (stage === 'ready') doc.ready_at = now;
+  if (stage === 'completed') doc.completed_at = now;
+  if (stage === 'cancelled') doc.void_reason = reason;
+  doc.updated_at = now;
+  updateRow_('Documents', doc);
+  logEvent_('stage', doc.doc_id, STAGE_WORDS[stage] + (reason ? ': ' + reason : ''));
+}
+
+/** docs.setStage: { doc_id, stage, reason? } Manual moves forward or back. Cancelling needs a reason. */
+function setStage_(p) {
+  var stage = vEnum_(p.stage, STAGES, 'Stage');
+  var reason = vStr_(p.reason, 'Reason', 500, stage === 'cancelled');
+  return withLock_(function () {
+    var doc = docForAction_(p.doc_id, 'invoice');
+    applyStage_(doc, stage, reason);
+    return getDocById_(doc.doc_id);
+  });
+}
+
+/** checklist.toggle: { doc_id, item_id, step_no, done } Tick or untick one shop step. */
+function toggleChecklist_(p) {
+  var stepNo = Number(p.step_no);
+  if (!Number.isInteger(stepNo) || stepNo < 1 || stepNo > 20) throw appError('VALIDATION', 'That step is not valid.');
+  var itemId = vId_(p.item_id, 'Item');
+  return withLock_(function () {
+    var doc = docForAction_(p.doc_id, 'invoice');
+    if (!readTable_('DocItems').some(function (it) { return it.doc_id === doc.doc_id && it.item_id === itemId; })) {
+      throw appError('NOT_FOUND', 'That item is no longer on this order.');
+    }
+    setStep_(doc.doc_id, itemId, stepNo, p.done !== false);
+    return getDocById_(doc.doc_id);
+  });
+}
+
+/** Save one checklist step as done (with today's time) or not done. (inside the lock) */
+function setStep_(docId, itemId, stepNo, done, rows) {
+  rows = rows || readTable_('Checklist');
+  var row = rows.filter(function (r) { return r.doc_id === docId && r.item_id === itemId && r.step_no === stepNo; })[0];
+  var value = done ? nowIso_() : '';
+  if (row) {
+    if (done && row.done_at) return; // keep the first date
+    row.done_at = value;
+    updateRow_('Checklist', row);
+  } else if (done) {
+    var item = findBy_(readTable_('DocItems'), 'item_id', itemId);
+    var product = item ? findBy_(getCatalog_().products, 'product_id', item.product_id) : null;
+    var labels = checklistSteps_(product ? product.detail_form : 'simple');
+    var newRow = { doc_id: docId, item_id: itemId, step_no: stepNo, label: labels[stepNo - 1] || ('Step ' + stepNo), done_at: value };
+    appendRows_('Checklist', [newRow]);
+    rows.push(newRow);
+  }
+}
+
+/** docs.void: { doc_id, reason } Numbers are never reused. A quote that became an invoice can't be voided. */
+function voidDoc_(p) {
+  var reason = vStr_(p.reason, 'Reason', 500, true);
+  return withLock_(function () {
+    var doc = docForAction_(p.doc_id);
+    if (doc.status === 'converted') throw appError('VALIDATION', 'This quote became an invoice. Void the invoice instead.');
+    doc.status = 'void';
+    doc.void_reason = reason;
+    doc.updated_at = nowIso_();
+    updateRow_('Documents', doc);
+    logEvent_('void', doc.doc_id, 'Void: ' + reason);
+    return getDocById_(doc.doc_id);
+  });
+}
+
+function quoteForConversion_(id) {
+  var quote = docForAction_(id, 'quote');
+  if (quote.status === 'converted') throw appError('VALIDATION', 'This quote is already an invoice.');
+  if (!readTable_('DocItems').some(function (it) { return it.doc_id === quote.doc_id; })) {
+    throw appError('VALIDATION', 'Add at least one item first.');
+  }
+  return quote;
+}
+
+/** docs.markApproved: { doc_id } For approvals by phone or in person: approves and makes the invoice (not sent yet). */
+function markApproved_(p) {
+  return withLock_(function () {
+    var quote = quoteForConversion_(p.doc_id);
+    quote.approved_at = nowIso_();
+    quote.status = 'approved';
+    updateRow_('Documents', quote);
+    logEvent_('approved', quote.doc_id, 'Marked approved in the app');
+    return getDocById_(convertQuote_(quote, {}).doc_id);
+  });
+}
+
+/** docs.convertToInvoice: { doc_id } Makes an invoice from the quote (not sent yet). */
+function convertToInvoice_(p) {
+  return withLock_(function () {
+    return getDocById_(convertQuote_(quoteForConversion_(p.doc_id), {}).doc_id);
+  });
+}
+
+/** docs.renewQuote: { doc_id } An expired (or declined) quote gets a new expiry date and can be approved again. */
+function renewQuote_(p) {
+  return withLock_(function () {
+    var quote = docForAction_(p.doc_id, 'quote');
+    var status = effectiveStatus_(quote, Date.now());
+    if (status !== 'expired' && status !== 'declined' && status !== 'sent') throw appError('VALIDATION', 'Only sent, expired or declined quotes can be renewed.');
+    quote.status = 'sent';
+    if (!quote.sent_at) quote.sent_at = nowIso_();
+    quote.expires_at = addDaysIso_(Number(getSettings_().quote_expiry_days) || 30);
+    quote.declined_at = '';
+    quote.decline_note = '';
+    quote.updated_at = nowIso_();
+    updateRow_('Documents', quote);
+    logEvent_('renewed', quote.doc_id, 'Renewed until ' + quote.expires_at.slice(0, 10));
+    return getDocById_(quote.doc_id);
+  });
+}
+
+/** docs.duplicate: { doc_id } A new draft of the same type, customer and items, with a new number. */
+function duplicateDoc_(p) {
+  return withLock_(function () {
+    var src = findBy_(readTable_('Documents'), 'doc_id', vId_(p.doc_id, 'Order'));
+    if (!src) throw appError('NOT_FOUND', 'That order no longer exists.');
+    var now = nowIso_();
+    var doc = {
+      doc_id: newId_('D'), public_id: newPublicId_(), type: src.type, number: nextNumber_(src.type),
+      customer_id: src.customer_id, status: 'draft', stage: src.type === 'invoice' ? 'awaiting_payment' : '',
+      fulfillment: src.fulfillment, created_at: now, updated_at: now, view_count: 0,
+      upfront_percent: src.upfront_percent || 100, discount_cents: src.discount_cents || 0, discount_label: src.discount_label,
+      paid_cents: 0, customer_note: src.customer_note, internal_notes: src.internal_notes
+    };
+    var copy = copyItems_(src.doc_id, doc.doc_id, doc.discount_cents);
+    doc.subtotal_cents = copy.totals.subtotal_cents;
+    doc.total_cents = copy.totals.total_cents;
+    appendRows_('Documents', [doc]);
+    appendRows_('DocItems', copy.items);
+    appendRows_('DocLines', copy.lines);
+    logEvent_('created', doc.doc_id, 'Copy of ' + src.number);
+    return getDocById_(doc.doc_id);
+  });
 }

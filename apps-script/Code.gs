@@ -7,7 +7,7 @@
  *   { "ok": true, "data": ... }  or  { "ok": false, "error": { "code", "message" } }
  */
 
-var API_VERSION = '0.5.0';
+var API_VERSION = '0.6.0';
 var SESSION_DAYS = 180;
 var LOGIN_MAX_FAILS = 10;
 var LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -26,6 +26,15 @@ function routes_() {
     'docs.get': { auth: true, fn: getDoc_ },
     'docs.list': { auth: true, fn: listDocs_ },
     'docs.markSent': { auth: true, fn: markSent_ },
+    'docs.setStage': { auth: true, fn: setStage_ },
+    'docs.void': { auth: true, fn: voidDoc_ },
+    'docs.markApproved': { auth: true, fn: markApproved_ },
+    'docs.convertToInvoice': { auth: true, fn: convertToInvoice_ },
+    'docs.renewQuote': { auth: true, fn: renewQuote_ },
+    'docs.duplicate': { auth: true, fn: duplicateDoc_ },
+    'checklist.toggle': { auth: true, fn: toggleChecklist_ },
+    'payments.add': { auth: true, fn: addPayment_ },
+    'payments.void': { auth: true, fn: voidPayment_ },
     'public.getDocument': { auth: false, fn: publicGetDocument_ },
     'public.approveQuote': { auth: false, fn: publicApproveQuote_ },
     'public.declineQuote': { auth: false, fn: publicDeclineQuote_ },

@@ -1,7 +1,7 @@
 // view/view.js: the customer's quote or invoice page (SPEC 8). One link, no login.
 // All text is set with textContent (via h()), never innerHTML.
 import { API_URL } from '../config.js';
-import { h, setChildren } from '../ui.js';
+import { h, setChildren, copyToClipboard } from '../ui.js';
 import { formatCents } from '../money.js';
 
 const page = document.getElementById('page');
@@ -69,26 +69,9 @@ function pill(doc) {
 
 /* ---------- copy to clipboard ---------- */
 
-/** Older copy method, for browsers that refuse the Clipboard API. */
-function copyWithSelection(text) {
-  const t = h('textarea', { readonly: true, style: { position: 'fixed', top: '0', left: '0', opacity: '0' } });
-  t.value = text;
-  document.body.appendChild(t);
-  t.select();
-  t.setSelectionRange(0, text.length); // iOS
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
-  t.remove();
-  return ok;
-}
-
 async function copyText(text, button) {
   const old = button.textContent;
-  let ok = false;
-  if (navigator.clipboard && window.isSecureContext) {
-    try { await navigator.clipboard.writeText(text); ok = true; } catch (err) { ok = false; }
-  }
-  if (!ok) ok = copyWithSelection(text);
+  const ok = await copyToClipboard(text);
   button.textContent = ok ? 'Copied!' : 'Copy failed';
   setTimeout(() => { button.textContent = old; }, 2000);
 }

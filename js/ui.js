@@ -282,3 +282,49 @@ export function formatDate(iso) {
   if (isNaN(d)) return '';
   return d.toLocaleDateString('en-US', { timeZone: 'America/Phoenix', month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+/* ---------- clipboard ---------- */
+
+function copyWithSelection(text) {
+  const t = document.createElement('textarea');
+  t.value = text;
+  t.setAttribute('readonly', '');
+  Object.assign(t.style, { position: 'fixed', top: '0', left: '0', opacity: '0' });
+  document.body.appendChild(t);
+  t.select();
+  t.setSelectionRange(0, text.length); // iOS
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+  t.remove();
+  return ok;
+}
+
+/**
+ * Copy text. Tries the Clipboard API, but gives up after 1.5 s (some browsers leave it hanging)
+ * and falls back to the older selection method. Resolves true when copied.
+ */
+export async function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    const ok = await Promise.race([
+      navigator.clipboard.writeText(text).then(() => true, () => false),
+      new Promise((r) => setTimeout(() => r(false), 1500))
+    ]);
+    if (ok) return true;
+  }
+  return copyWithSelection(text);
+}
+
+/** Last resort when copying fails: show the text selected so it can be copied by hand. */
+export function showTextToCopy(title, text, onDone) {
+  sheet((close) => {
+    const box = h('textarea', { class: 'input', rows: '5', readonly: true });
+    box.value = text;
+    setTimeout(() => { box.focus(); box.select(); }, 50);
+    return [
+      h('h2', null, title),
+      h('p', { class: 'muted' }, 'Press and hold the text, then choose Copy.'),
+      box,
+      h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn btn-secondary btn-block', onclick: () => close() }, 'Done'))
+    ];
+  }, { onClose: () => { if (onDone) setTimeout(onDone, 300); } });
+}

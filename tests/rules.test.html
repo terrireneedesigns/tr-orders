@@ -24,6 +24,7 @@
     effectiveStatus, docFlags, statusInfo, applyLeftSleeve, tierWarnings, needsCustomQuoteWarning,
     newJacketDetails, extraLabel, DAY_MS
   } from '../js/rules.js';
+  import { messageFor, customerLink } from '../js/share.js';
 
   const results = [];
   const eq = (name, got, want) => results.push({ name, ok: Object.is(got, want) || JSON.stringify(got) === JSON.stringify(want), got, want });
@@ -117,6 +118,20 @@
   eq('quote expiring within 5 days', docFlags({ ...q, expires_at: iso(now + 2 * DAY_MS) }, 1, S, now).quote_expiring, true);
   eq('status labels', [statusInfo({ type: 'quote', status: 'draft' }).label, statusInfo({ type: 'invoice', status: 'issued', stage: 'ready' }).label,
     statusInfo({ type: 'invoice', status: 'void', stage: 'awaiting_payment' }).label], ['Draft', 'Ready', 'Void']);
+
+
+  // ---------- share.js message templates (SPEC 7, 14.5) ----------
+  const mdoc = { number: 'TR-1012', total_cents: 34100, amount_due_cents: 34100, public_id: 'abc', fulfillment: 'pickup' };
+  const cust = { name: 'Denise Carter', phone: '480-555-0199' };
+  const link = customerLink(mdoc);
+  eq('link format', link.endsWith('/view.html?id=abc'), true);
+  eq('invoice message', messageFor('invoice', mdoc, cust, {}), 'Hi Denise, here is your invoice TR-1012 from Terri Renee Evolvé for $341.00. Payment details are on the page: ' + link);
+  eq('quote message', messageFor('quote', { ...mdoc, number: 'Q-1004' }, cust, {}), 'Hi Denise, here is your quote Q-1004 from Terri Renee Evolvé. Review and approve here: ' + link);
+  eq('receipt message', messageFor('receipt', mdoc, cust, {}), 'Thank you, Denise! Your payment for TR-1012 is received: ' + link);
+  eq('ready message (pickup)', messageFor('ready', mdoc, cust, {}), 'Hi Denise, your order TR-1012 is ready! It\'s ready for pickup.');
+  eq('ready message (delivery)', messageFor('ready', { ...mdoc, fulfillment: 'delivery' }, cust, {}), 'Hi Denise, your order TR-1012 is ready! We\'ll be in touch to arrange delivery.');
+  eq('template from Settings wins', messageFor('invoice', mdoc, cust, { msg_invoice: '{name}: {amount_due} due for {number}' }), 'Denise Carter: $341.00 due for TR-1012');
+  eq('unknown placeholder kept', messageFor('invoice', mdoc, cust, { msg_invoice: 'Hi {nickname}' }), 'Hi {nickname}');
 
   const failed = results.filter((r) => !r.ok);
   document.getElementById('results').replaceChildren(...results.map((r) => {

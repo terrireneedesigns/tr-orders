@@ -775,5 +775,151 @@ test('void document link stops working', () => {
   eq(pub('public.getDocument', { public_id: inv5.doc.public_id }, t5).error.code, 'NOT_FOUND', 'even for Terri');
 });
 
+/* ---------------- milestone 6: sending, payments, progress ---------------- */
+
+const t6 = tok();
+const lookbook = () => {
+  const s = std();
+  const ls = table('AddOns').find(a => a.rule === 'left_sleeve');
+  return docPayload({ items: [{ item_id: 'I_jacket0001', product_id: s.pk.product_id, package_id: s.pk.package_id, title: 'Jacket', qty: 1,
+    details: { spots: [{ key: 'sleeve', side: 'left' }] },
+    lines: s.lines.concat([{ label: 'Left sleeve', amount_cents: 1000, kind: 'addon', addon_id: ls.addon_id },
+      { label: 'Extra small', amount_cents: 2800, kind: 'addon' }, { label: 'Extra small', amount_cents: 2800, kind: 'addon' }]) }] });
+};
+let inv6;
+test('acceptance 14: no "Did you send it?" yes means still Not sent', () => {
+  inv6 = call(env, 'docs.save', lookbook(), t6).data;
+  eq(inv6.doc.total_cents, 34100);
+  eq(call(env, 'docs.get', { doc_id: inv6.doc.doc_id }, t6).data.doc.flags.not_sent, true);
+  eq(inv6.progress.length, 1); eq(inv6.progress[0].steps.length, 8); eq(inv6.progress[0].final_step, 7);
+  eq(inv6.progress[0].steps.map(s => s.done_at).filter(Boolean).length, 0);
+});
+
+test('acceptance 11: $341 Zelle payment = Paid in full, In progress, step 1 checked', () => {
+  call(env, 'docs.markSent', { doc_id: inv6.doc.doc_id, method: 'share' }, t6);
+  const r = call(env, 'payments.add', { doc_id: inv6.doc.doc_id, amount_cents: 34100, method: 'zelle', paid_on: '2026-11-22', note: 'memo TR' }, t6);
+  eq(r.ok, true, JSON.stringify(r.error));
+  const d = r.data.doc;
+  eq(d.paid_cents, 34100); eq(d.payment_status, 'paid'); eq(d.stage, 'in_progress'); eq(d.amount_due_cents, 0);
+  ok(r.data.progress[0].steps[0].done_at, 'step 1 ticked'); eq(r.data.progress[0].steps[1].done_at, '');
+  eq(r.data.payments.length, 1); eq(r.data.payments[0].method, 'zelle');
+  eq(r.data.log.slice(0, 2).map(l => l.action), ['stage', 'payment'], 'newest first');
+  const pubv = call(env, 'public.getDocument', { public_id: inv6.doc.public_id, preview: true }).data;
+  eq(pubv.payments, [{ paid_on: '2026-11-22', amount_cents: 34100, method: 'zelle' }]);
+});
+
+test('payment validation: amount, method, date, quotes, cancelled', () => {
+  const id = inv6.doc.doc_id;
+  eq(call(env, 'payments.add', { doc_id: id, amount_cents: 0, method: 'cash' }, t6).error.message, 'The amount must be more than $0.');
+  eq(call(env, 'payments.add', { doc_id: id, amount_cents: 100, method: 'card' }, t6).error.code, 'VALIDATION');
+  eq(call(env, 'payments.add', { doc_id: id, amount_cents: 100, method: 'cash', paid_on: 'Tuesday' }, t6).error.code, 'VALIDATION');
+  const q = call(env, 'docs.save', docPayload({ type: 'quote' }), t6).data;
+  eq(call(env, 'payments.add', { doc_id: q.doc.doc_id, amount_cents: 100, method: 'cash' }, t6).error.message, 'This only works on invoices.');
+});
+
+test('partial upfront: under the deposit stays awaiting; reaching it moves to in progress; draft becomes issued', () => {
+  const half = call(env, 'docs.save', docPayload({ upfront_percent: 50, items: [{ title: 'Purse', qty: 1, lines: [{ label: 'Purse', amount_cents: 34101, kind: 'custom' }] }] }), t6).data;
+  const a = call(env, 'payments.add', { doc_id: half.doc.doc_id, amount_cents: 10000, method: 'cash' }, t6).data.doc;
+  eq(a.stage, 'awaiting_payment'); eq(a.status, 'issued'); eq(a.amount_due_cents, 7051); eq(a.payment_status, 'partial');
+  const b = call(env, 'payments.add', { doc_id: half.doc.doc_id, amount_cents: 7051, method: 'zelle' }, t6).data;
+  eq(b.doc.stage, 'in_progress'); eq(b.doc.amount_due_cents, 0, 'balance not due until ready');
+  ok(b.progress[0].steps[0].done_at);
+  const r = call(env, 'docs.setStage', { doc_id: half.doc.doc_id, stage: 'ready' }, t6).data;
+  eq(r.doc.amount_due_cents, 17050, 'balance due when ready'); ok(r.doc.ready_at);
+});
+
+test('void a payment: paid goes back down, stage stays, kept for the record', () => {
+  const r0 = call(env, 'payments.add', { doc_id: inv6.doc.doc_id, amount_cents: 500, method: 'cash' }, t6).data;
+  const extra = r0.payments.find(p => p.amount_cents === 500);
+  eq(r0.doc.paid_cents, 34600);
+  const r = call(env, 'payments.void', { payment_id: extra.payment_id, reason: 'typed by mistake' }, t6).data;
+  eq(r.doc.paid_cents, 34100); eq(r.doc.stage, 'in_progress');
+  ok(r.payments.find(p => p.payment_id === extra.payment_id).voided);
+  eq(call(env, 'payments.void', { payment_id: extra.payment_id }, t6).error.message, 'That payment is already void.');
+  ok(r.log.some(l => l.action === 'payment_void'));
+});
+
+test('checklist: tick, untick, keeps first date; bad step or item refused', () => {
+  const id = inv6.doc.doc_id, item = inv6.progress[0].item_id;
+  const a = call(env, 'checklist.toggle', { doc_id: id, item_id: item, step_no: 3, done: true }, t6).data;
+  const first = a.progress[0].steps[2].done_at; ok(first);
+  const b = call(env, 'checklist.toggle', { doc_id: id, item_id: item, step_no: 3, done: true }, t6).data;
+  eq(b.progress[0].steps[2].done_at, first, 'first date kept');
+  const c = call(env, 'checklist.toggle', { doc_id: id, item_id: item, step_no: 3, done: false }, t6).data;
+  eq(c.progress[0].steps[2].done_at, '');
+  eq(call(env, 'checklist.toggle', { doc_id: id, item_id: item, step_no: 0 }, t6).error.code, 'VALIDATION');
+  eq(call(env, 'checklist.toggle', { doc_id: id, item_id: 'I_notonorder1', step_no: 2 }, t6).error.code, 'NOT_FOUND');
+  // editing the order keeps ticked steps (item id kept)
+  const cur = call(env, 'docs.get', { doc_id: id }, t6).data;
+  const saved = call(env, 'docs.save', docPayload({ doc_id: id, items: cur.items.map(it => Object.assign({}, it)) }), t6).data;
+  ok(saved.progress[0].steps[0].done_at, 'step 1 survives an edit');
+});
+
+test('stages: ready sets ready_at, Ready 3+ days flag (acceptance 13), completed, cancel needs a reason', () => {
+  const id = inv6.doc.doc_id;
+  const r = call(env, 'docs.setStage', { doc_id: id, stage: 'ready' }, t6).data;
+  eq(r.doc.stage, 'ready'); ok(r.doc.ready_at); eq(r.doc.flags.ready_late, false);
+  const row = table('Documents').find(d => d.doc_id === id);
+  row.ready_at = new Date(Date.now() - 4 * 86400000).toISOString(); vm.runInContext('updateRow_', env.ctx)('Documents', row);
+  const listed = call(env, 'docs.list', { filter: 'ready' }, t6).data.rows.find(x => x.doc_id === id);
+  eq(listed.flags.ready_late, true); eq(listed.flags.balance_overdue, false);
+  const done = call(env, 'docs.setStage', { doc_id: id, stage: 'completed' }, t6).data.doc;
+  eq(done.stage, 'completed'); ok(done.completed_at);
+  eq(call(env, 'docs.setStage', { doc_id: id, stage: 'cancelled' }, t6).error.message, 'Reason is required.');
+  eq(call(env, 'docs.setStage', { doc_id: id, stage: 'shipped' }, t6).error.code, 'VALIDATION');
+  const back = call(env, 'docs.setStage', { doc_id: id, stage: 'in_progress' }, t6).data.doc;
+  eq(back.stage, 'in_progress', 'can move back');
+  ok(table('Log').filter(l => l.doc_id === id && l.action === 'stage').length >= 3);
+});
+
+test('acceptance 12: sent 8 days ago and unpaid shows Overdue in the list', () => {
+  const d = call(env, 'docs.save', docPayload(), t6).data;
+  call(env, 'docs.markSent', { doc_id: d.doc.doc_id }, t6);
+  const row = table('Documents').find(x => x.doc_id === d.doc.doc_id);
+  row.sent_at = new Date(Date.now() - 8 * 86400000).toISOString(); vm.runInContext('updateRow_', env.ctx)('Documents', row);
+  eq(call(env, 'docs.list', { filter: 'unpaid' }, t6).data.rows.find(x => x.doc_id === d.doc.doc_id).flags.overdue, true);
+});
+
+test('void needs a reason; void orders cannot be edited, paid or moved', () => {
+  const d = call(env, 'docs.save', docPayload(), t6).data;
+  eq(call(env, 'docs.void', { doc_id: d.doc.doc_id }, t6).error.message, 'Reason is required.');
+  const v = call(env, 'docs.void', { doc_id: d.doc.doc_id, reason: 'Duplicate order' }, t6).data.doc;
+  eq(v.status, 'void'); eq(v.void_reason, 'Duplicate order');
+  eq(call(env, 'payments.add', { doc_id: d.doc.doc_id, amount_cents: 100, method: 'cash' }, t6).error.message, 'This order is void.');
+  eq(call(env, 'docs.setStage', { doc_id: d.doc.doc_id, stage: 'ready' }, t6).error.message, 'This order is void.');
+  eq(call(env, 'docs.save', docPayload({ doc_id: d.doc.doc_id }), t6).error.code, 'VALIDATION');
+});
+
+test('convert to invoice, mark approved, renew and duplicate', () => {
+  const q = call(env, 'docs.save', docPayload({ type: 'quote', internal_notes: 'keep me' }), t6).data;
+  const inv = call(env, 'docs.convertToInvoice', { doc_id: q.doc.doc_id }, t6).data;
+  eq(inv.doc.type, 'invoice'); eq(inv.doc.status, 'draft'); eq(inv.doc.sent_at, ''); eq(inv.doc.from_quote_number, q.doc.number);
+  eq(inv.doc.internal_notes, 'keep me'); eq(inv.doc.total_cents, q.doc.total_cents);
+  eq(call(env, 'docs.get', { doc_id: q.doc.doc_id }, t6).data.doc.converted_invoice_number, inv.doc.number);
+  eq(call(env, 'docs.convertToInvoice', { doc_id: q.doc.doc_id }, t6).error.message, 'This quote is already an invoice.');
+  eq(call(env, 'docs.void', { doc_id: q.doc.doc_id, reason: 'x' }, t6).error.message, 'This quote became an invoice. Void the invoice instead.');
+
+  const q2 = call(env, 'docs.save', docPayload({ type: 'quote' }), t6).data;
+  call(env, 'docs.markSent', { doc_id: q2.doc.doc_id }, t6);
+  const inv2 = call(env, 'docs.markApproved', { doc_id: q2.doc.doc_id }, t6).data;
+  eq(inv2.doc.type, 'invoice'); eq(inv2.doc.status, 'draft');
+  const q2row = table('Documents').find(x => x.doc_id === q2.doc.doc_id);
+  eq(q2row.status, 'converted'); ok(q2row.approved_at);
+
+  const q3 = call(env, 'docs.save', docPayload({ type: 'quote' }), t6).data;
+  call(env, 'docs.markSent', { doc_id: q3.doc.doc_id }, t6);
+  const row = table('Documents').find(x => x.doc_id === q3.doc.doc_id);
+  row.expires_at = '2026-01-01T00:00:00-07:00'; vm.runInContext('updateRow_', env.ctx)('Documents', row);
+  eq(call(env, 'docs.get', { doc_id: q3.doc.doc_id }, t6).data.doc.effective_status, 'expired');
+  const renewed = call(env, 'docs.renewQuote', { doc_id: q3.doc.doc_id }, t6).data.doc;
+  eq(renewed.effective_status, 'sent'); ok(new Date(renewed.expires_at) > Date.now() + 29 * 86400000);
+  eq(call(env, 'docs.renewQuote', { doc_id: q.doc.doc_id }, t6).error.code, 'VALIDATION', 'converted quote');
+
+  const dup = call(env, 'docs.duplicate', { doc_id: inv6.doc.doc_id }, t6).data;
+  eq(dup.doc.type, 'invoice'); eq(dup.doc.status, 'draft'); eq(dup.doc.paid_cents, 0); eq(dup.doc.total_cents, 34100);
+  ok(dup.doc.number !== inv6.doc.number); ok(dup.items[0].item_id !== inv6.items[0].item_id);
+  eq(dup.payments.length, 0); eq(dup.progress[0].steps.filter(s => s.done_at).length, 0);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -69,3 +69,35 @@ function docFlags_(doc, itemCount, settings, now) {
       isoMs_(doc.expires_at) - now < 5 * DAY_MS
   };
 }
+
+/* ---------- shop checklists (SPEC 6.8) ---------- */
+
+var CHECKLIST_STEPS = {
+  jacket: ['Patches and placement approved, paid in full', 'Jacket and patches in', 'Lining opened', 'Patches sewn on',
+    'Lining closed, checked', 'Pressed', 'Final check', 'Picked up or delivered'],
+  simple: ['Details approved, paid in full', 'Materials in', 'Work done', 'Final check', 'Picked up or delivered']
+};
+
+function checklistSteps_(detailForm) {
+  return CHECKLIST_STEPS[detailForm] || CHECKLIST_STEPS.simple;
+}
+
+/**
+ * Checklist for each item of an invoice: template steps merged with the done dates saved in the
+ * Checklist tab. Rows are only stored once a step is ticked, so editing items never breaks it.
+ * Returns [{ item_id, title, final_step, steps: [{ step_no, label, done_at }] }].
+ */
+function progressFor_(items, rows, products) {
+  var formOf = {};
+  products.forEach(function (p) { formOf[p.product_id] = p.detail_form; });
+  return items.map(function (it) {
+    var labels = checklistSteps_(formOf[it.product_id]);
+    return {
+      item_id: it.item_id, title: it.title, final_step: labels.length - 1,
+      steps: labels.map(function (label, i) {
+        var row = rows.filter(function (r) { return r.item_id === it.item_id && r.step_no === i + 1; })[0];
+        return { step_no: i + 1, label: label, done_at: row ? row.done_at : '' };
+      })
+    };
+  });
+}

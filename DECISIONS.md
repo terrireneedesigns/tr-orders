@@ -89,3 +89,19 @@ Choices made where SPEC.md left room, newest milestone last.
 13. **Page weight** is about 400 KB (small logo copy, the provided Zelle QR as is so it keeps scanning, fonts, about 25 KB of script). Most of the wait is the Apps Script reply, which is usually 1 to 2 seconds.
 14. **Print ("Save as PDF")** keeps a small dark band behind the gold logo (the logo needs a dark background), turns the amount panel into a bordered white box, opens the terms, and hides buttons and the approve box.
 15. **New Apps Script file `Public.gs`** for the three public actions; quote-to-invoice conversion lives in `Documents.gs` so the admin "Convert to invoice" in milestone 6 can reuse it.
+
+## Milestone 6: sending, payments and progress
+
+1. **The share menu needs a fresh tap.** iPhones only open it straight from a tap, so the app never waits for the server first. After "Save & Send", recording a payment or marking ready, a small sheet offers "Send now" / "Send receipt" / "Send message"; tapping it opens the share menu. One extra tap, but it always works.
+2. **The link is only in the message text**, not passed separately as the share "url", because some apps (Messages) would then show it twice.
+3. **"Did you send it?" is asked for quotes and invoices only.** Receipts and "ready" messages don't change any status, so they don't ask. Closing the share menu without choosing an app asks nothing (SPEC 7).
+4. **On computers (no share menu)** a sheet offers Copy message, Text and Email, then asks "Did you send it?". Copying tries the clipboard but gives up after 1.5 s (one browser left it hanging during testing) and falls back to the older copy method, and as a last resort shows the text selected to copy by hand. `window.prompt` is not used: some browsers block it.
+5. **Recording a payment on a draft invoice makes it "issued"** (customers sometimes pay in person before anything is sent). Moving the stage does the same. "Not sent" still shows until it is sent or marked sent.
+6. **Checklists are stored only when a step is ticked.** Steps come from the product's details form (jacket 8 steps, simple 5) and are merged with the saved ticks, so adding or removing items never leaves broken rows, and items keep their ticks through edits (item ids are kept). Ticking again keeps the first date; unticking clears it.
+7. **Checklist prompts:** when the last item reaches Final check while the order is In progress, the app asks "Mark order Ready?"; when every item reaches "Picked up or delivered" while Ready, it asks "Mark order Completed?". Marking Ready or Completed by button does not tick steps for her.
+8. **Voiding a payment keeps it** (marked void, with the reason added to its note) and lowers paid. It does not move the stage back automatically; "Change stage" in More does that if needed.
+9. **Cancel vs Void:** Cancel (invoices) keeps the order and its link, marked Cancelled, and can be undone with Change stage. Void stops the customer's link and can't be undone. Both need a reason; the reason is stored in `void_reason`. A quote that became an invoice can't be voided (void the invoice).
+10. **Mark approved** (phone or in-person approvals) approves the quote and makes the invoice as a draft for Terri to send. **Convert to invoice** does the same without recording an approval. The customer's own approval (milestone 5) makes a sent invoice.
+11. **Renew** works on expired and declined quotes: 30 more days and back to "sent". **Duplicate** makes a new draft with a new number, same customer and items, no payments or ticks, and opens it in the editor.
+12. **Activity** shows the Log newest first in plain words. Checklist ticks are not logged (they have their own dates), to keep the timeline readable.
+13. **New Apps Script file `Payments.gs`.** Quote-to-invoice conversion and Duplicate share one item-copying function.
