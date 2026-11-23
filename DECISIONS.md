@@ -105,3 +105,10 @@ Choices made where SPEC.md left room, newest milestone last.
 11. **Renew** works on expired and declined quotes: 30 more days and back to "sent". **Duplicate** makes a new draft with a new number, same customer and items, no payments or ticks, and opens it in the editor.
 12. **Activity** shows the Log newest first in plain words. Checklist ticks are not logged (they have their own dates), to keep the timeline readable.
 13. **New Apps Script file `Payments.gs`.** Quote-to-invoice conversion and Duplicate share one item-copying function.
+
+## 0.6.1: updates apply on their own
+
+1. **Found on Terri's iPhone:** after the 0.6.0 release the Home Screen app kept showing 0.5.0. The offline copy opens first and the new files only show on the next real launch, and iPhones often resume a Home Screen app instead of restarting it.
+2. **Fix:** the app now asks for a new version whenever it comes back on screen (and every 30 minutes while open). A new version downloads every file fresh and takes over; the app then reloads itself. If an order is being edited or a sheet is open, it shows an "Update ready" banner with Refresh instead of reloading.
+3. **Every release raises `VERSION` in `sw.js`** (same as `APP_VERSION`). A changed `sw.js` is how phones notice a release.
+4. Phones still on 0.6.0 or older get this fix the old way, once: close the app fully and open it again.

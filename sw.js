@@ -2,11 +2,12 @@
 // so TR Orders opens instantly. Data always comes live from the back end and is never cached.
 //
 // Strategy: "stale while revalidate". The saved copy is shown right away and a fresh copy
-// is fetched in the background, so a new release shows up on the next launch by itself.
-// Bump VERSION (keep it equal to APP_VERSION in js/config.js) when files are added,
-// removed or renamed, so old copies are cleared.
+// is fetched in the background.
+// RAISE VERSION FOR EVERY RELEASE (keep it equal to APP_VERSION in js/config.js). A changed
+// sw.js is how the app notices a release: the new version downloads every file fresh, takes
+// over, and the app reloads itself (see js/app.js).
 
-const VERSION = '0.6.0';
+const VERSION = '0.6.1';
 const SHELL_CACHE = 'tr-shell-' + VERSION;
 const FONT_CACHE = 'tr-fonts-v1';
 

@@ -112,9 +112,11 @@ Running `setup()` again is safe. It only adds what is missing, asks before chang
 4. Sign in. Close the app and open it again: it should go straight to Home without asking for the passcode.
 
 ### 1B.7 Updating the front end
-1. Change the files and upload or push them.
-2. The app updates by itself: it opens instantly from its saved copy and fetches the new files in the background, so the change shows the **next** time it is opened (sometimes you need to close it fully and open it twice).
-3. When adding, removing or renaming files, also add them to the list in `sw.js`, and raise `APP_VERSION` in `js/config.js` and `VERSION` in `sw.js` (keep them the same).
+1. Change the files. **Raise the version number** in both `js/config.js` (`APP_VERSION`) and `sw.js` (`VERSION`), keeping them the same. Add any new or renamed files to the list in `sw.js`.
+2. Upload or push them.
+3. The app checks for a new version each time it is opened or brought back on screen. When it finds one, it downloads it and reloads itself within a few seconds. If Terri is editing an order at that moment, it shows "A new version of TR Orders is ready" with a **Refresh** button instead, so nothing typed is lost.
+4. To check which version a phone has: Settings, bottom line ("TR Orders app 0.6.1").
+5. If a phone ever seems stuck on an old version: swipe up from the bottom, swipe TR Orders away to close it fully, and open it again (twice if needed).
 
 ---
 

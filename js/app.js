@@ -1,7 +1,7 @@
 // app.js: starts the admin app: sign-in check, header, tab bar, routes, service worker.
 import { APP_VERSION } from './config.js';
 import { getToken, onAuthLost } from './api.js';
-import { route, fallback, start as startRouter, resolve, navigate, back } from './router.js';
+import { route, fallback, start as startRouter, resolve, navigate, back, currentPath } from './router.js';
 import { store, loadBootstrap, clearStore } from './store.js';
 import { h, icon, enablePullToRefresh, showError } from './ui.js';
 import { renderLogin } from './screens/login.js';
@@ -173,9 +173,38 @@ onAuthLost(() => showLogin('Please sign in again.'));
 
 /* ---------- service worker (offline app shell) ---------- */
 
+// Updates: the app opens from its saved copy, so a new release has to be picked up on purpose.
+// It checks for a new version whenever the app comes back on screen (Home Screen apps are rarely
+// restarted), and when the new version has taken over it reloads, unless Terri is in the middle
+// of editing or a sheet is open; then it shows an "Update ready" banner instead.
+function isBusy() {
+  const path = currentPath();
+  return path.startsWith('/new/') || path.endsWith('/edit') || !!document.querySelector('.sheet-backdrop');
+}
+
+function showUpdateBanner() {
+  if (document.querySelector('.update-banner')) return;
+  document.body.appendChild(h('div', { class: 'update-banner', role: 'status' },
+    h('span', null, 'A new version of TR Orders is ready.'),
+    h('button', { type: 'button', class: 'btn btn-gold', onclick: () => location.reload() }, 'Refresh')));
+}
+
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker not registered', err));
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return; } // first install: nothing to refresh
+    if (isBusy()) showUpdateBanner();
+    else location.reload();
+  });
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('sw.js');
+      const check = () => reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+      setInterval(check, 30 * 60 * 1000);
+    } catch (err) {
+      console.warn('Service worker not registered', err);
+    }
   });
 }
 
