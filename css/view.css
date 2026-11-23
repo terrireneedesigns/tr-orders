@@ -1,0 +1,112 @@
+/* view.css: customer quote/invoice page (view.html), plus print styles for "Save as PDF". */
+
+body.view { font-size: 16px; }
+
+.view-header {
+  background: var(--ink);
+  padding: calc(var(--safe-top) + 20px) 16px 20px;
+  text-align: center;
+}
+.view-header img { width: 180px; height: auto; aspect-ratio: 916 / 765; }
+
+.view-main {
+  max-width: 640px; margin: 0 auto;
+  padding: 24px calc(16px + var(--safe-right)) calc(32px + var(--safe-bottom)) calc(16px + var(--safe-left));
+}
+.view-section { margin-top: 28px; }
+
+.doc-title { font-size: 34px; margin: 0 0 6px; }
+.doc-meta { color: var(--muted); margin: 0 0 12px; }
+.doc-meta strong { color: var(--ink); font-weight: 500; }
+
+.banner {
+  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px;
+  background: #FBF3DF; border: 1px solid #E6D29F; border-left: 4px solid var(--gold-text);
+}
+.banner.thanks { background: #E8F1EA; border-color: #B9D3BF; border-left-color: var(--ok); }
+.banner p { margin: 0; }
+.banner p + p { margin-top: 6px; }
+
+.pill { font-size: 14px; padding: 4px 12px; }
+
+/* items */
+.v-item { background: var(--panel); border-radius: var(--radius); padding: 16px; }
+.v-item + .v-item { margin-top: 12px; }
+.v-item-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.v-item-head h3 { font-size: 22px; margin: 0; }
+.v-lines { list-style: none; margin: 10px 0 0; padding: 0; }
+.v-lines li { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; border-top: 1px solid var(--line); }
+.v-lines li:first-child { border-top: 0; }
+.v-lines .amt, .v-amount { font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
+.v-item-total { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid var(--ink); font-weight: 600; }
+.v-details { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 15px; }
+.v-details p { margin: 0 0 6px; }
+.v-spots { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.v-spots th, .v-spots td { text-align: left; padding: 6px 8px 6px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.v-spots th { font-weight: 500; color: var(--muted); width: 38%; }
+.v-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* totals */
+.v-totals { background: var(--panel); border-radius: var(--radius); padding: 16px; }
+.v-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.v-row.grand { border-top: 2px solid var(--ink); margin-top: 6px; padding-top: 10px; font-weight: 600; font-size: 20px; }
+.v-row.grand .v-amount { font-family: var(--font-head); font-size: 30px; line-height: 1; }
+
+/* amount due panel: dark background, gold amount */
+.due-panel { background: var(--ink); color: var(--cream); border-radius: 12px; padding: 22px 18px; }
+.due-panel .label { color: var(--gold); }
+.due-amount { font-family: var(--font-head); font-size: 48px; font-weight: 600; color: var(--gold); line-height: 1.05; margin: 2px 0 8px; font-variant-numeric: lining-nums; }
+.due-panel h3 { color: var(--cream); font-size: 22px; margin: 22px 0 10px; }
+.due-panel p { margin: 0 0 8px; }
+.due-panel .muted-on-dark { color: rgba(249, 246, 240, 0.8); }
+.zelle { display: grid; gap: 10px; }
+.zelle-qr { background: var(--white); border-radius: var(--radius); padding: 10px; width: 200px; height: 200px; }
+.zelle-qr img { width: 180px; height: 180px; display: block; }
+.copy-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.copy-row .value { font-size: 20px; font-weight: 600; letter-spacing: 0.02em; font-variant-numeric: lining-nums; }
+.btn-copy { min-height: var(--tap); padding: 0 16px; font-size: 16px; background: transparent; color: var(--gold); border-color: var(--gold); }
+.memo { color: var(--gold); font-weight: 600; }
+.policy { border-top: 1px solid rgba(249, 246, 240, 0.25); margin-top: 18px; padding-top: 14px; font-weight: 500; }
+
+/* payments, terms */
+.v-payments { list-style: none; margin: 0; padding: 0; background: var(--panel); border-radius: var(--radius); }
+.v-payments li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+.v-payments li + li { border-top: 1px solid var(--line); }
+details.terms { background: var(--panel); border-radius: var(--radius); padding: 0 16px; }
+details.terms summary { min-height: var(--tap); display: flex; align-items: center; font-family: var(--font-head); font-size: 22px; font-weight: 600; cursor: pointer; }
+details.terms ol { margin: 0; padding: 0 0 16px 20px; }
+details.terms li { margin-bottom: 10px; }
+
+/* approve / decline */
+.approve-box { border: 2px solid var(--ink); border-radius: 12px; padding: 18px 16px; }
+.approve-box h2 { margin-bottom: 8px; }
+.check-row { display: flex; gap: 12px; align-items: flex-start; min-height: var(--tap); padding: 8px 0; cursor: pointer; }
+.check-row input { width: 28px; height: 28px; margin: 0; flex: none; accent-color: var(--ink); }
+.approve-box .error { color: var(--oxblood); font-weight: 500; margin: 8px 0 0; }
+.approve-box .error:empty { display: none; }
+.decline-box { margin-top: 12px; display: grid; gap: 10px; }
+
+.view-actions { display: grid; gap: 10px; }
+.view-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 15px; }
+.view-footer p { margin: 0 0 6px; }
+.view-footer .biz { font-family: var(--font-head); font-size: 22px; color: var(--ink); font-weight: 600; }
+.view-footer a { color: var(--gold-text); }
+
+.inactive { text-align: center; padding: 32px 8px; }
+
+@media print {
+  @page { margin: 14mm; }
+  body.view { background: #fff; font-size: 12pt; }
+  .view-header { padding: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .view-header img { width: 110px; }
+  .view-main { max-width: none; padding: 12px 0 0; }
+  .no-print, .btn, .btn-copy, .approve-box, .banner { display: none !important; }
+  .v-item, .v-totals, .v-payments, details.terms { background: #fff; border: 1px solid #ccc; }
+  details.terms > :not(summary) { display: block; }
+  .due-panel { background: #fff; color: var(--ink); border: 2px solid var(--ink); }
+  .due-panel .label, .due-amount, .memo, .due-panel h3 { color: var(--ink); }
+  .due-panel .muted-on-dark { color: var(--muted); }
+  .policy { border-top-color: #ccc; }
+  .v-item, .due-panel, .v-totals { break-inside: avoid; }
+  a { color: var(--ink); text-decoration: none; }
+}

@@ -635,5 +635,145 @@ test('flags: overdue after 7 days unpaid, ready 3+ days, expired quote, expiring
   eq(flags({ type: 'invoice', status: 'draft', total_cents: 0 }, 0, settings, now).not_sent, false, 'empty draft is not "not sent"');
 });
 
+/* ---------------- milestone 5: customer page ---------------- */
+
+const t5 = tok();
+const pub = (action, payload, token) => call(env, action, payload, token);
+let inv5;
+test('drafts, bad ids and void documents show "no longer active" and leak nothing (acceptance 18)', () => {
+  inv5 = call(env, 'docs.save', docPayload({ internal_notes: 'SECRET-NOTE-123', customer_note: 'See you soon' }), t5).data;
+  const r = pub('public.getDocument', { public_id: inv5.doc.public_id });
+  eq(r.error.code, 'NOT_FOUND');
+  eq(r.error.message, 'This link is no longer active. Please contact Terri Renee Evolvé at 623-521-6235.');
+  eq(Object.keys(r).sort(), ['error', 'ok']);
+  eq(pub('public.getDocument', { public_id: 'short' }).error.code, 'NOT_FOUND');
+  eq(pub('public.getDocument', { public_id: 'x'.repeat(43) }).error.code, 'NOT_FOUND');
+  eq(pub('public.getDocument', { public_id: '<script>alert(1)</script>aaaaaaaaaaaaaaaaaaaa' }).error.code, 'NOT_FOUND');
+  eq(pub('public.getDocument', {}).error.code, 'NOT_FOUND');
+});
+
+test('Terri can preview a draft with her token, without counting a view', () => {
+  const r = pub('public.getDocument', { public_id: inv5.doc.public_id }, t5);
+  eq(r.ok, true); eq(r.data.doc.status, 'draft');
+  eq(table('Documents').find(d => d.doc_id === inv5.doc.doc_id).view_count, 0);
+});
+
+test('mark sent: invoice becomes issued; empty orders cannot be sent', () => {
+  const r = call(env, 'docs.markSent', { doc_id: inv5.doc.doc_id, method: 'manual' }, t5);
+  eq(r.data.doc.status, 'issued'); ok(r.data.doc.sent_at); eq(r.data.doc.sent_method, 'manual');
+  eq(r.data.doc.flags.not_sent, false);
+  ok(r.data.log.some(l => l.action === 'sent'));
+  const empty = call(env, 'docs.save', docPayload({ items: [] }), t5).data;
+  eq(call(env, 'docs.markSent', { doc_id: empty.doc.doc_id }, t5).error.message, 'Add at least one item before sending.');
+});
+
+test('customer page response contains only customer-safe fields (acceptance 20)', () => {
+  const r = pub('public.getDocument', { public_id: inv5.doc.public_id });
+  eq(r.ok, true);
+  const json = JSON.stringify(r.data);
+  ['SECRET-NOTE-123', '602-555-0142', 'gloria@example.com', inv5.doc.doc_id, custId, 'internal_notes', '"photos"', 'photo_id', 'photo_file_id', 'drive_file_id', 'token', 'Size L']
+    .forEach(s => ok(json.indexOf(s) === -1, 'leaked: ' + s));
+  eq(Object.keys(r.data).sort(), ['business', 'customer', 'doc', 'items', 'payments']);
+  eq(Object.keys(r.data.customer), ['name']);
+  eq(r.data.doc.customer_note, 'See you soon');
+  eq(r.data.business.zelle_contact, '623-523-7472'); eq(r.data.business.zelle_display_name, 'THERESA ODOM');
+  eq(r.data.business.terms.length, 8);
+  eq(r.data.doc.amount_due_cents, 27500); eq(r.data.doc.payment_status, 'unpaid');
+  eq(r.data.items[0].lines.length, 7); eq(Object.keys(r.data.items[0].lines[0]).sort(), ['amount_cents', 'label']);
+  eq(r.data.items[0].details.style, "Women's");
+  eq(r.data.items[0].details.spots, [{ label: 'Back', patch_no: '30', patch_name: 'OES chenille letters', own_patch: false, notes: '' }]);
+});
+
+test('views are counted for customers only (acceptance 15)', () => {
+  const row = () => table('Documents').find(d => d.doc_id === inv5.doc.doc_id);
+  eq(row().view_count, 1); ok(row().first_viewed_at);
+  const first = row().first_viewed_at;
+  pub('public.getDocument', { public_id: inv5.doc.public_id });
+  eq(row().view_count, 2); eq(row().first_viewed_at, first);
+  pub('public.getDocument', { public_id: inv5.doc.public_id }, t5);
+  pub('public.getDocument', { public_id: inv5.doc.public_id, preview: true });
+  eq(row().view_count, 2, 'admin token and preview=1 do not count');
+  eq(table('Log').filter(l => l.doc_id === inv5.doc.doc_id && l.action === 'viewed').length, 1, 'first view logged once');
+  eq(call(env, 'docs.get', { doc_id: inv5.doc.doc_id }, t5).data.doc.flags.viewed, true);
+});
+
+let q5;
+test('approving needs the terms box and a name; quote must be sent', () => {
+  const s = std();
+  q5 = call(env, 'docs.save', docPayload({ type: 'quote', internal_notes: 'quote secret', items: [{
+    item_id: 'I_quoteitem1', product_id: s.pk.product_id, package_id: s.pk.package_id, title: 'Jacket', qty: 1,
+    details: { style: 'mens', spots: [{ key: 'back', patch_no: '01' }, { key: 'extra_zz', where: 'collar', line_id: 'L_extra_line1', patch_no: '02' }] },
+    lines: s.lines.concat([{ line_id: 'L_extra_line1', label: 'Extra small patch', amount_cents: 2800, kind: 'addon' }]) }] }), t5).data;
+  eq(pub('public.approveQuote', { public_id: q5.doc.public_id, name: 'Gloria Hayes', terms_accepted: true }).error.code, 'NOT_FOUND', 'draft quote');
+  const sent = call(env, 'docs.markSent', { doc_id: q5.doc.doc_id }, t5).data.doc;
+  eq(sent.status, 'sent');
+  const days = (new Date(sent.expires_at) - new Date(sent.sent_at)) / 86400000; ok(days > 29.9 && days < 30.1, 'expires in 30 days');
+  eq(pub('public.approveQuote', { public_id: q5.doc.public_id, name: 'Gloria Hayes' }).error.message, 'Please tick the box to agree to the terms.');
+  eq(pub('public.approveQuote', { public_id: q5.doc.public_id, name: ' ', terms_accepted: true }).error.message, 'Your full name is required.');
+  eq(pub('public.approveQuote', { public_id: q5.doc.public_id, name: 'G', terms_accepted: 'yes' }).error.code, 'VALIDATION');
+});
+
+test('approval converts the quote to a new sent invoice shown in place (acceptance 16)', () => {
+  const before = vm.runInContext('getSettings_()', env.ctx).next_order_no;
+  const r = pub('public.approveQuote', { public_id: q5.doc.public_id, name: 'Gloria Hayes', terms_accepted: true });
+  eq(r.ok, true, JSON.stringify(r.error));
+  const d = r.data.doc;
+  eq(d.type, 'invoice'); eq(d.number, 'TR-' + before); eq(d.status, 'issued'); eq(d.stage, 'awaiting_payment');
+  eq(d.from_quote_number, q5.doc.number); eq(d.total_cents, 27500 + 2800); eq(d.amount_due_cents, 30300);
+  ok(d.public_id !== q5.doc.public_id);
+  ok(JSON.stringify(r.data).indexOf('quote secret') === -1, 'no internal notes');
+  const quoteRow = table('Documents').find(x => x.doc_id === q5.doc.doc_id);
+  eq(quoteRow.status, 'converted'); eq(quoteRow.approved_name, 'Gloria Hayes'); eq(quoteRow.terms_accepted, true); ok(quoteRow.approved_at);
+  const invRow = table('Documents').find(x => x.number === d.number);
+  eq(invRow.sent_method, 'customer_approved'); ok(invRow.sent_at); eq(invRow.from_quote_id, q5.doc.doc_id); eq(invRow.internal_notes, 'quote secret');
+  eq(quoteRow.converted_invoice_id, invRow.doc_id);
+  // copied items get new ids, and the extra spot points at the copied price line
+  const full = call(env, 'docs.get', { doc_id: invRow.doc_id }, t5).data;
+  ok(full.items[0].item_id !== 'I_quoteitem1');
+  const spot = full.items[0].details.spots.find(s => s.key === 'extra_zz');
+  const line = full.items[0].lines.find(l => l.label === 'Extra small patch');
+  eq(spot.line_id, line.line_id); ok(line.line_id !== 'L_extra_line1');
+  // the customer's extra spot shows with its place
+  eq(r.data.items[0].details.spots.map(s => s.label), ['Back', 'Extra A (collar)']);
+  // logs
+  eq(table('Log').filter(l => l.doc_id === q5.doc.doc_id).map(l => l.action), ['created', 'sent', 'approved', 'converted']);
+});
+
+test('old quote link now opens the invoice; approving twice is refused', () => {
+  const r = pub('public.getDocument', { public_id: q5.doc.public_id });
+  eq(r.data.doc.type, 'invoice'); eq(r.data.doc.from_quote_number, q5.doc.number);
+  eq(pub('public.approveQuote', { public_id: q5.doc.public_id, name: 'Gloria Hayes', terms_accepted: true }).error.message, 'This quote can no longer be approved.');
+  eq(call(env, 'docs.save', docPayload({ doc_id: q5.doc.doc_id, type: 'quote' }), t5).error.message, 'This quote became an invoice. Edit the invoice instead.');
+});
+
+test('expired quote: shown as expired, cannot be approved (acceptance 17)', () => {
+  const q = call(env, 'docs.save', docPayload({ type: 'quote' }), t5).data;
+  call(env, 'docs.markSent', { doc_id: q.doc.doc_id }, t5);
+  const row = table('Documents').find(d => d.doc_id === q.doc.doc_id);
+  row.expires_at = '2026-01-01T00:00:00-07:00'; vm.runInContext('updateRow_', env.ctx)('Documents', row);
+  eq(pub('public.getDocument', { public_id: q.doc.public_id }).data.doc.status, 'expired');
+  eq(pub('public.approveQuote', { public_id: q.doc.public_id, name: 'A B', terms_accepted: true }).error.message, 'This quote has expired. Contact us to renew it.');
+  eq(pub('public.declineQuote', { public_id: q.doc.public_id }).error.code, 'VALIDATION');
+});
+
+test('decline with a note; then neither approve nor decline again', () => {
+  const q = call(env, 'docs.save', docPayload({ type: 'quote' }), t5).data;
+  call(env, 'docs.markSent', { doc_id: q.doc.doc_id }, t5);
+  const r = pub('public.declineQuote', { public_id: q.doc.public_id, note: 'Too much for now, maybe in spring' });
+  eq(r.data.doc.status, 'declined');
+  const row = table('Documents').find(d => d.doc_id === q.doc.doc_id);
+  eq(row.decline_note, 'Too much for now, maybe in spring'); ok(row.declined_at);
+  eq(pub('public.declineQuote', { public_id: q.doc.public_id }).error.code, 'VALIDATION');
+  eq(pub('public.approveQuote', { public_id: q.doc.public_id, name: 'A', terms_accepted: true }).error.message, 'This quote can no longer be approved.');
+  ok(table('Log').some(l => l.doc_id === q.doc.doc_id && l.action === 'declined'));
+});
+
+test('void document link stops working', () => {
+  const row = table('Documents').find(d => d.doc_id === inv5.doc.doc_id);
+  row.status = 'void'; vm.runInContext('updateRow_', env.ctx)('Documents', row);
+  eq(pub('public.getDocument', { public_id: inv5.doc.public_id }).error.code, 'NOT_FOUND');
+  eq(pub('public.getDocument', { public_id: inv5.doc.public_id }, t5).error.code, 'NOT_FOUND', 'even for Terri');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

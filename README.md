@@ -11,7 +11,8 @@ Quote, invoice and order app for **Terri Renee Evolvé**. The full plan is in [S
 - Milestone 1 (Google setup and back end skeleton) is done: `setup()`, the `doPost` router, `auth.login` and `bootstrap`, with a test page.
 - Milestone 2 (front end shell) is done: sign-in screen, Home and the five tabs, Home Screen app setup, offline app shell.
 - Milestone 3 (catalog and customers) is done: add and edit products, packages and their price lines, add-ons and patches; customers list, detail, add and edit, with a duplicate check.
-- Milestone 4 (order editor) is done: create and edit quotes and invoices with package lines, add-ons, the jacket details form and patch picker, the left-sleeve, extra-patch and tier rules, totals, a local draft that survives closing the app, and numbering (Q-1001, TR-1001). Orders list with filters and search. Sending, payments and progress come next.
+- Milestone 4 (order editor) is done: create and edit quotes and invoices with package lines, add-ons, the jacket details form and patch picker, the left-sleeve, extra-patch and tier rules, totals, a local draft that survives closing the app, and numbering (Q-1001, TR-1001). Orders list with filters and search.
+- Milestone 5 (customer page) is done: `view.html` shows the quote or invoice with the Zelle QR and cash panel, payment history, the True Value Statement, Save as PDF, and quote Approve / Decline (approving turns the quote into an invoice on the spot). Views are tracked; Terri's previews don't count. The order page has Preview, Copy link and Mark as sent. Sending from the share menu, payments and progress come next.
 
 ---
 
@@ -37,7 +38,7 @@ Do all of this signed in as the **business Gmail** (terrireneedesigns@gmail.com)
    - Tick **Show "appsscript.json" manifest file in editor**.
    - Set **Time zone** to **(GMT-07:00) Phoenix** (America/Phoenix).
 4. Back in the **Editor** (`< >` icon), create one script file per `.gs` file in this repo's [`apps-script/`](apps-script/) folder, with the same names:
-   `Code`, `Data`, `Rules`, `Documents`, `Catalog`, `Customers`, `Backup`, `Setup`. (Click **+** > **Script**, type the name without `.gs`, then paste the file's contents. Replace the starter code in `Code.gs`.)
+   `Code`, `Data`, `Rules`, `Documents`, `Public`, `Catalog`, `Customers`, `Backup`, `Setup`. (Click **+** > **Script**, type the name without `.gs`, then paste the file's contents. Replace the starter code in `Code.gs`.)
 5. Open `appsscript.json` in the editor and replace its contents with [`apps-script/appsscript.json`](apps-script/appsscript.json).
 6. Click **Save** (disk icon).
 
@@ -183,5 +184,5 @@ Editing the Sheet by hand is fine (for example fixing a typo in a patch name). T
 - Local app with a fake back end: `node tests/dev-server.js`, then open <http://localhost:8080/tr-orders/> (fake passcode `123456`, data resets on restart). It serves `js/config.js` pointed at the fake without changing the file. On localhost the service worker loads from the network first, so edits show on reload.
 - Replacing a logo: the app shell uses smaller copies, `assets/logo-full-sm.png` (480 px wide) and `assets/logo-monogram-sm.png` (160 px wide). After replacing `logo-full.png` or `logo-monogram.png`, make new small copies (macOS: `sips -Z 480 logo-full.png --out logo-full-sm.png` and `sips -Z 160 logo-monogram.png --out logo-monogram-sm.png`), or just copy the new file over the `-sm` name. No code changes needed either way.
 - API: POST `{ action, token, payload }` as `text/plain;charset=utf-8` (not `application/json`, which triggers a CORS preflight that Apps Script cannot answer). Responses are `{ ok: true, data }` or `{ ok: false, error: { code, message } }`, where `message` is safe to show as is.
-- Actions so far: `ping`, `auth.login`, `auth.logout`, `auth.logoutAll`, `auth.changePasscode`, `bootstrap`, `backup.run`, `customers.save` / `get` / `list`, `catalog.saveProduct` / `savePackage` / `saveTemplateLines` / `saveAddOn` / `savePatch` / `reorder`, `docs.save` / `get` / `list`.
+- Actions so far: `ping`, `auth.login`, `auth.logout`, `auth.logoutAll`, `auth.changePasscode`, `bootstrap`, `backup.run`, `customers.save` / `get` / `list`, `catalog.saveProduct` / `savePackage` / `saveTemplateLines` / `saveAddOn` / `savePatch` / `reorder`, `docs.save` / `get` / `list` / `markSent`, and the public (no sign-in) `public.getDocument` / `approveQuote` / `declineQuote`.
 - Money and rules tests: open `tests/rules.test.html` in a browser (from the dev server or GitHub Pages).

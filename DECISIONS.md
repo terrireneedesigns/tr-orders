@@ -71,3 +71,21 @@ Choices made where SPEC.md left room, newest milestone last.
 14. **Patch spots without a patch, own-patch tick or notes are left out of the order summary**, to keep it short.
 15. **Customer edits keep fields that are not sent** (found while testing: archiving with only the id would have blanked the phone). The app always sends every field, so this is a safety net.
 16. **New Apps Script files:** `Rules.gs` (server copy of the rules) and `Documents.gs`. The milestone 2 "Coming soon" screen was removed.
+
+## Milestone 5: customer page
+
+1. **Approval email waits for milestone 7.** Emailing the business inbox needs a new Google permission (sending mail), which the owner has to grant once in the Apps Script editor. It comes with the other notifications in milestone 7, so this deploy needed no extra steps. Approval is still recorded in the order's activity and on the order page ("Approved by … on …").
+2. **Added `docs.markSent` and a "Mark as sent" button now** (SPEC 7 lists it for milestone 6), plus **Copy link** and **Preview**, so Terri can already send links by text or email herself and so the customer page could be tested end to end. The share-menu "Send" flow is still milestone 6.
+3. **Sending a quote sets its expiry** (30 days, from Settings). Sending again keeps the first sent date.
+4. **Old quote links keep working.** After a quote becomes an invoice, its link opens the invoice, and the address bar switches to the invoice's own link.
+5. **Terri can preview drafts.** Public links refuse drafts and void documents, except when the request carries a valid admin sign-in (Terri previewing from the app). Void links are refused even for Terri.
+6. **Views:** the first customer view is written to the activity log once; every view updates "last viewed" and the count. Views with Terri's sign-in or `preview=1` are not counted. The "Preview" button opens a new tab with `preview=1`, so it also works where the browser keeps a separate sign-in (Safari vs Home Screen).
+7. **Strict allow-list.** The customer page gets only: business contact, Zelle and terms; the document's number, dates, status, money, fulfillment and note to customer; the customer's name; item titles, lines and customer-facing details (patch names filled in); and payments (date, amount, method). Never ids, internal notes, phone or email, photos or other customers. A test checks this.
+8. **Customer-facing status words:** quotes show "Ready for your review", "Expired" or "Declined"; invoices show "Awaiting payment", "Paid in full", "In progress", "Ready for pickup/delivery", "Completed" or "Cancelled". "Paid in full" shows whenever paid ≥ total until the order is ready.
+9. **Amount panel wording:** "Total due" normally; "Due now" plus "Balance due when your order is ready" when the upfront percent is under 100; "Balance due" once something has been paid. With an upfront percent under 100 the policy line explains the split instead of saying "paid in full at the time of order", which would contradict the panel.
+10. **The amount panel shows on invoices only.** A quote isn't payable; its approve box says payment details appear after approving.
+11. **Copy buttons** try the modern clipboard first and fall back to the older method, then show "Copied!".
+12. **The customer page is never cached by the service worker**, so customers and previews always see the latest version and data.
+13. **Page weight** is about 400 KB (small logo copy, the provided Zelle QR as is so it keeps scanning, fonts, about 25 KB of script). Most of the wait is the Apps Script reply, which is usually 1 to 2 seconds.
+14. **Print ("Save as PDF")** keeps a small dark band behind the gold logo (the logo needs a dark background), turns the amount panel into a bordered white box, opens the terms, and hides buttons and the approve box.
+15. **New Apps Script file `Public.gs`** for the three public actions; quote-to-invoice conversion lives in `Documents.gs` so the admin "Convert to invoice" in milestone 6 can reuse it.

@@ -1,9 +1,10 @@
 // screens/order-detail.js: one quote or invoice. For now: summary, items, details and Edit.
 // Sending, payments, progress checklist and activity arrive in milestone 6 (SPEC 6.5).
-import { h, formatDate, setChildren } from '../ui.js';
+import { h, formatDate, formatDateTime, setChildren, confirmDialog, toast, showError } from '../ui.js';
 import { call } from '../api.js';
 import { store, upsertCustomer } from '../store.js';
 import { formatCents } from '../money.js';
+import { BASE_URL } from '../config.js';
 import { INCLUDED_SPOTS, extraLabel } from '../rules.js';
 import { statusBadges } from './orders.js';
 
@@ -34,9 +35,19 @@ export default {
           d.type === 'invoice' && d.amount_due_cents !== d.total_cents
             ? h('div', { class: 'totals-row' }, h('span', null, 'Due now'), h('span', { class: 'amount' }, formatCents(d.amount_due_cents))) : null),
 
-        editable ? h('div', { class: 'section' }, h('a', { class: 'btn btn-block', href: '#/orders/' + encodeURIComponent(d.number) + '/edit' }, 'Edit')) : null,
+        editable ? h('div', { class: 'section stack' },
+          h('a', { class: 'btn btn-block', href: '#/orders/' + encodeURIComponent(d.number) + '/edit' }, 'Edit'),
+          h('div', { class: 'item-buttons' },
+            h('a', { class: 'btn btn-secondary', href: customerLink(d, true), target: '_blank', rel: 'noopener', 'aria-label': 'Preview as customer' }, 'Preview'),
+            copyLinkButton(d)),
+          res.items.length && !d.sent_at ? markSentButton(d, load) : null) : null,
 
-        h('p', { class: 'card small muted section' }, 'Sending, payments and progress tracking come in the next update.'),
+        h('div', { class: 'section small muted' },
+          d.sent_at ? h('p', null, 'Sent ' + formatDateTime(d.sent_at) + (d.sent_method === 'customer_approved' ? ' (customer approved the quote)' : '')) : null,
+          d.first_viewed_at ? h('p', null, 'Viewed ' + formatDateTime(d.first_viewed_at) + (d.view_count > 1 ? ' · opened ' + d.view_count + ' times' : '')) : null,
+          d.approved_at ? h('p', null, 'Approved by ' + d.approved_name + ' on ' + formatDateTime(d.approved_at)) : null,
+          d.declined_at ? h('p', null, 'Declined ' + formatDateTime(d.declined_at) + (d.decline_note ? ': "' + d.decline_note + '"' : '')) : null,
+          h('p', { class: 'card' }, 'Sending from the share menu, payments and progress tracking come in the next update.')),
 
         h('section', { class: 'section' },
           h('h2', { class: 'label' }, 'Items'),
@@ -90,4 +101,45 @@ function detailsView(it) {
     d.regalia ? h('p', null, 'Regalia: ' + d.regalia) : null,
     spots.length ? h('ul', { class: 'spot-list' }, spots) : null,
     d.notes ? h('p', { class: 'notes' }, d.notes) : null);
+}
+
+/** The customer's link. With preview, Terri's visit isn't counted as a view. */
+export function customerLink(d, preview = false) {
+  return BASE_URL + 'view.html?id=' + encodeURIComponent(d.public_id) + (preview ? '&preview=1' : '');
+}
+
+function copyLinkButton(d) {
+  const btn = h('button', { type: 'button', class: 'btn btn-secondary' }, 'Copy link');
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(customerLink(d));
+      toast('Link copied');
+    } catch (err) {
+      window.prompt('Copy this link:', customerLink(d));
+    }
+  });
+  return btn;
+}
+
+function markSentButton(d, reload) {
+  const btn = h('button', { type: 'button', class: 'btn btn-secondary btn-block' }, 'Mark as sent');
+  btn.addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: 'Mark as sent?',
+      message: 'Use this when you sent the link yourself, by text or email. ' +
+        (d.type === 'quote' ? 'The quote can be approved for the next 30 days.' : 'The customer can then open the invoice.'),
+      yes: 'Mark as sent'
+    });
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      await call('docs.markSent', { doc_id: d.doc_id, method: 'manual' });
+      toast('Marked as sent');
+      await reload();
+    } catch (err) {
+      btn.disabled = false;
+      showError(err);
+    }
+  });
+  return btn;
 }

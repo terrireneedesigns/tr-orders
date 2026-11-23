@@ -6,7 +6,7 @@
 // Bump VERSION (keep it equal to APP_VERSION in js/config.js) when files are added,
 // removed or renamed, so old copies are cleared.
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const SHELL_CACHE = 'tr-shell-' + VERSION;
 const FONT_CACHE = 'tr-fonts-v1';
 
@@ -74,7 +74,8 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // The customer page and the test pages are always loaded fresh.
-  if (url.pathname.endsWith('/view.html') || url.pathname.includes('/tests/')) return;
+  if (url.pathname.endsWith('/view.html') || url.pathname.includes('/tests/') ||
+      url.pathname.includes('/js/view/') || url.pathname.endsWith('/css/view.css') || url.pathname.endsWith('/zelle-qr.png')) return;
 
   // Any navigation inside the app gets the app page (routes live after the #).
   if (req.mode === 'navigate') {

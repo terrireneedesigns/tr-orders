@@ -277,3 +277,91 @@ function listDocs_(p) {
 
   return { rows: rows.slice(offset, offset + limit), total: rows.length };
 }
+
+/* ---------- sending and conversion ---------- */
+
+/**
+ * docs.markSent: { doc_id, method: 'manual' | 'share' } records that the link was sent.
+ * Quotes: draft -> sent, expires quote_expiry_days later. Invoices: draft -> issued.
+ * Sending again (resend) keeps the first sent date.
+ */
+function markSent_(p) {
+  var id = vId_(p.doc_id, 'Order');
+  var method = vEnum_(p.method || 'manual', ['manual', 'share'], 'How it was sent');
+  return withLock_(function () {
+    var doc = findBy_(readTable_('Documents'), 'doc_id', id);
+    if (!doc) throw appError('NOT_FOUND', 'That order no longer exists.');
+    if (doc.status === 'void' || doc.status === 'converted') throw appError('VALIDATION', 'This order can\'t be sent.');
+    if (!readTable_('DocItems').some(function (it) { return it.doc_id === id; })) {
+      throw appError('VALIDATION', 'Add at least one item before sending.');
+    }
+    var now = nowIso_();
+    if (!doc.sent_at) {
+      doc.sent_at = now;
+      if (doc.type === 'quote') doc.expires_at = addDaysIso_(Number(getSettings_().quote_expiry_days) || 30);
+    }
+    doc.sent_method = method;
+    if (doc.status === 'draft') doc.status = doc.type === 'quote' ? 'sent' : 'issued';
+    doc.updated_at = now;
+    updateRow_('Documents', doc);
+    logEvent_('sent', doc.doc_id, method === 'share' ? 'Sent from the app' : 'Marked as sent');
+    return getDocById_(doc.doc_id);
+  });
+}
+
+/**
+ * Turn a quote into a new invoice (call inside the lock). Copies items, lines, details, customer,
+ * fulfillment, notes, discount and upfront percent, with a new TR- number and new ids.
+ * opts.sentMethod: 'customer_approved' marks the invoice as already sent (the customer is looking at it).
+ * Returns the new invoice row; the quote becomes "converted".
+ */
+function convertQuote_(quote, opts) {
+  var now = nowIso_();
+  var items = readTable_('DocItems').filter(function (it) { return it.doc_id === quote.doc_id; }).sort(bySort_);
+  var lines = readTable_('DocLines').filter(function (l) { return l.doc_id === quote.doc_id; }).sort(bySort_);
+  var invoice = {
+    doc_id: newId_('D'), public_id: newPublicId_(), type: 'invoice', number: nextNumber_('invoice'),
+    customer_id: quote.customer_id, status: opts.sentMethod ? 'issued' : 'draft', stage: 'awaiting_payment',
+    fulfillment: quote.fulfillment, created_at: now, updated_at: now,
+    sent_at: opts.sentMethod ? now : '', sent_method: opts.sentMethod || '',
+    view_count: 0, from_quote_id: quote.doc_id, est_ready_date: quote.est_ready_date,
+    upfront_percent: quote.upfront_percent || 100, discount_cents: quote.discount_cents || 0,
+    discount_label: quote.discount_label, subtotal_cents: quote.subtotal_cents, total_cents: quote.total_cents,
+    paid_cents: 0, customer_note: quote.customer_note, internal_notes: quote.internal_notes
+  };
+  var lineMap = {};
+  var newItems = items.map(function (it) {
+    var itemId = newId_('I');
+    var itemLines = lines.filter(function (l) { return l.item_id === it.item_id; }).map(function (l) {
+      var lineId = newId_('L');
+      lineMap[l.line_id] = lineId;
+      return { line_id: lineId, item_id: itemId, doc_id: invoice.doc_id, label: l.label, amount_cents: l.amount_cents, kind: l.kind, addon_id: l.addon_id, sort: l.sort };
+    });
+    return { row: { item_id: itemId, doc_id: invoice.doc_id, product_id: it.product_id, package_id: it.package_id, title: it.title, qty: it.qty, sort: it.sort, details_json: it.details_json }, lines: itemLines };
+  });
+  // Extra patch spots point at their price line; point them at the copied line.
+  newItems.forEach(function (ni) {
+    try {
+      var d = JSON.parse(ni.row.details_json || '{}');
+      if (Array.isArray(d.spots)) {
+        d.spots.forEach(function (s) { if (s.line_id && lineMap[s.line_id]) s.line_id = lineMap[s.line_id]; });
+        ni.row.details_json = JSON.stringify(d);
+      }
+    } catch (err) { /* leave details as they were */ }
+  });
+  var totals = computeTotals_(newItems.map(function (ni) { return { qty: ni.row.qty, lines: ni.lines }; }), invoice.discount_cents);
+  invoice.subtotal_cents = totals.subtotal_cents;
+  invoice.total_cents = totals.total_cents;
+
+  appendRows_('Documents', [invoice]);
+  appendRows_('DocItems', newItems.map(function (ni) { return ni.row; }));
+  appendRows_('DocLines', [].concat.apply([], newItems.map(function (ni) { return ni.lines; })));
+
+  quote.status = 'converted';
+  quote.converted_invoice_id = invoice.doc_id;
+  quote.updated_at = now;
+  updateRow_('Documents', quote);
+  logEvent_('converted', quote.doc_id, 'Became invoice ' + invoice.number);
+  logEvent_('created', invoice.doc_id, 'Invoice ' + invoice.number + ' from quote ' + quote.number);
+  return invoice;
+}

@@ -7,7 +7,7 @@
  *   { "ok": true, "data": ... }  or  { "ok": false, "error": { "code", "message" } }
  */
 
-var API_VERSION = '0.4.0';
+var API_VERSION = '0.5.0';
 var SESSION_DAYS = 180;
 var LOGIN_MAX_FAILS = 10;
 var LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -25,6 +25,10 @@ function routes_() {
     'docs.save': { auth: true, fn: saveDoc_ },
     'docs.get': { auth: true, fn: getDoc_ },
     'docs.list': { auth: true, fn: listDocs_ },
+    'docs.markSent': { auth: true, fn: markSent_ },
+    'public.getDocument': { auth: false, fn: publicGetDocument_ },
+    'public.approveQuote': { auth: false, fn: publicApproveQuote_ },
+    'public.declineQuote': { auth: false, fn: publicDeclineQuote_ },
     'customers.save': { auth: true, fn: saveCustomer_ },
     'customers.get': { auth: true, fn: getCustomer_ },
     'customers.list': { auth: true, fn: listCustomers_ },
