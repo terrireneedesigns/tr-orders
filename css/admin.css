@@ -1,16 +1,17 @@
 /* admin.css: the TR Orders admin app layout (header, tab bar, screens, login). */
 
-/* iPhone Home Screen app: the page is drawn under the status bar (clock, battery), and that area,
-   plus any pull-down at the top, shows the root background. Make it the header's dark colour so the
-   top never fades to white. The body keeps the cream page colour and grows with the content. */
+/* iPhone Home Screen app: the phone colours the area behind the clock and battery, and the strip
+   below the tab bar, from the page's background (newer iPhones read the body, not just the root).
+   So both html and body are the header's dark colour, and the cream lives on the app itself (#app).
+   A thin fixed dark strip at the very top also tells the phone the top edge is dark. */
 html { height: 100%; background: var(--ink); }
-body { min-height: 100%; background: var(--cream); overscroll-behavior-y: none; }
+body { min-height: 100%; background: var(--ink); overscroll-behavior-y: none; }
 body::before {
   content: ''; position: fixed; top: 0; left: 0; right: 0; z-index: 60; pointer-events: none;
-  height: var(--safe-top); background: var(--ink);
+  height: max(var(--safe-top), 2px); background: var(--ink);
 }
 
-#app { min-height: 100%; }
+#app { min-height: 100vh; min-height: 100dvh; background: var(--cream); }
 
 /* ---------- header ---------- */
 

@@ -110,3 +110,11 @@ details.terms li { margin-bottom: 10px; }
   .v-item, .due-panel, .v-totals { break-inside: avoid; }
   a { color: var(--ink); text-decoration: none; }
 }
+
+/* Zelle QR scanning steps (on the dark panel) */
+.zelle-steps { background: rgba(249, 246, 240, 0.08); border-radius: var(--radius); padding: 12px 14px; }
+.zelle-steps .steps-title { font-weight: 600; color: var(--gold); margin-bottom: 6px; }
+.zelle-steps ol { margin: 0 0 10px; padding-left: 22px; }
+.zelle-steps li { margin-bottom: 6px; }
+.zelle-steps li strong { color: var(--cream); }
+@media print { .zelle-steps { background: #fff; border: 1px solid #ccc; } .zelle-steps .steps-title, .zelle-steps li strong { color: var(--ink); } }
