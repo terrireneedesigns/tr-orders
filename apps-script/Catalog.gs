@@ -13,6 +13,7 @@ function getCatalog_() {
     packages: readTable_('Packages').map(clean_).sort(bySort_),
     templateLines: readTable_('TemplateLines').map(clean_).sort(bySort_),
     addOns: readTable_('AddOns').map(clean_).sort(bySort_),
+    packageCosts: readTable_('PackageCosts').map(clean_).sort(bySort_),
     patches: readTable_('Patches').map(clean_).sort(function (a, b) {
       return String(a.patch_no).localeCompare(String(b.patch_no), 'en', { numeric: true });
     })

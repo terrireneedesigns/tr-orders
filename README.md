@@ -194,6 +194,7 @@ Until this is done, approvals and declines still work; the emails are just skipp
 | Data | Google Sheet "TR Orders Data" (business Drive) |
 | Passcode hash, folder IDs, login lockout | Apps Script > Project Settings > Script Properties |
 | Order photos | Drive: TR Orders / Order Photos (private) |
+| Costs, time, typical costs | Sheet tabs Costs, TimeLog, PackageCosts (made automatically the first time they're used) |
 | Backups | Drive: TR Orders / Backups |
 | Back end code | [`apps-script/`](apps-script/) in this repo, pasted into the Apps Script project |
 | Front end | this repo, served by GitHub Pages (milestone 2) |
@@ -204,12 +205,13 @@ Editing the Sheet by hand is fine (for example fixing a typo in a patch name). T
 
 ## Going live checklist
 
-1. **Clear the test orders.** In Apps Script, open **Setup.gs**, choose **clearTestOrders**, click **Run**, and answer in the Sheet's tab (type `CLEAR`). It saves a backup first, removes every quote, invoice, payment, checklist tick, order photo and activity entry, restarts numbering at Q-1001 and TR-1001, and asks whether to remove customers too. Products, patches, settings and sign-ins stay.
+1. **Clear the test orders.** In Apps Script, open **Setup.gs**, choose **clearTestOrders**, click **Run**, and answer in the Sheet's tab (type `CLEAR`). It saves a backup first, removes every quote, invoice, payment, checklist tick, order photo, cost, time entry and activity entry, restarts numbering at Q-1001 and TR-1001, and asks whether to remove customers too. Products, patches, typical costs, settings and sign-ins stay.
 2. **Emails:** make sure `setupNotifications` has been run once (Part 2B). Approve a test quote before step 1 to see the email arrive.
 3. **Each phone:** add TR Orders to the Home Screen from Safari and sign in ([INSTALL-IPHONE.md](INSTALL-IPHONE.md)). Settings shows the app version at the bottom.
 4. **Still open (SPEC 17):**
    - Price lines for hats and purses: Catalog > product > Custom package > add lines (until then, add lines on each order).
    - Patch photos (optional): Catalog > Patches > a patch > Add photo.
+   - Typical costs (optional, saves typing): Catalog > product > package > Typical costs, for example the jacket blank and lining. Hourly rate: Settings > Profit tracking (starts at a $20 placeholder).
    - Custom domain (later): point `invoices.terrireneedesigns.com` at GitHub Pages; nothing in the code needs to change (links are worked out from where the app runs).
 
 ---

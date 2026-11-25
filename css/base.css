@@ -159,7 +159,7 @@ select.input {
   display: block; width: 100%;
   min-height: var(--control); padding: 12px 14px;
   border: 1px solid var(--field); border-radius: var(--radius);
-  background: var(--white); color: var(--ink);
+  background-color: var(--white); color: var(--ink);
   font: 400 18px/1.4 var(--font-body); /* 16px+ prevents iOS zoom on focus */
   -webkit-appearance: none; appearance: none;
 }

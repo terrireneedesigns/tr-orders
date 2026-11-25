@@ -67,6 +67,18 @@ Open the order and tap **Record payment**. The amount is already filled in. Choo
 - **+ Add photo** (near the bottom) keeps reference photos with the order. Customers never see them.
 - **More…** has Edit, Duplicate, Copy customer link, Cancel order and more.
 
+## 8. Costs, time and profit
+
+This replaces the Sewing Profit Tracker spreadsheet. What you charged and what was paid already come from your orders, so you only add what you spent and how long you worked.
+
+- **On an order**, scroll to **Costs & time**. Tap **+ Add cost** for the jacket, fabric, patches, supplies or shipping (how many × cost each). Tap **+ Add time** for each work session: pick the task and the hours. Tap any cost or time to change or delete it.
+- **Typical costs:** in **Catalog**, open a package (for example Standard) and fill in **Typical costs**, such as the jacket blank and lining. Every new order with that package starts with those costs. If you paid something different, tap the cost on the order and change it.
+- **Spending that isn't for one order** (patch stock, thread, tools): Home → **Profit & costs** → **+ Add general cost**.
+- **Home → Profit & costs** shows this month, last month, this year or all time: charged, spent, profit, profit after paying yourself, what you earned per hour, where the money went, and each order's profit. Orders with no costs yet are marked.
+- **Settings → Profit tracking** sets your hourly rate (starts at $20) and the list of work tasks.
+
+Customers never see any of this.
+
 ---
 
 ## Good to know

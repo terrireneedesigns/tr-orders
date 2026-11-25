@@ -50,10 +50,16 @@ function seedDemo() {
     lines: lines.concat([{ label: ls.label, amount_cents: 1000, kind: 'addon', addon_id: ls.addon_id },
       { line_id: 'L_demo_x1', label: xs.label, amount_cents: 2800, kind: 'addon', addon_id: xs.addon_id },
       { line_id: 'L_demo_x2', label: xs.label, amount_cents: 2800, kind: 'addon', addon_id: xs.addon_id }]) };
+  api('catalog.savePackageCosts', { package_id: pk.package_id, costs: [
+    { category: 'jacket', description: 'Bomber jacket blank', amount_cents: 3800 }, { category: 'fabric', description: 'Satin lining', amount_cents: 1250 }] }, t);
   const a = api('docs.save', { type: 'invoice', customer_id: c.customer_id, est_ready_date: '2026-12-15', customer_note: 'Thank you for your order, Denise!', items: [jacket] }, t).data;
   api('docs.markSent', { doc_id: a.doc.doc_id, method: 'share' }, t);
   api('payments.add', { doc_id: a.doc.doc_id, amount_cents: 34100, method: 'zelle' }, t);
   api('checklist.toggle', { doc_id: a.doc.doc_id, item_id: a.items[0].item_id, step_no: 2 }, t);
+  api('costs.save', { doc_id: a.doc.doc_id, category: 'patches', description: 'Square & compass', supplier: 'Patch maker', qty: 2, each_cents: 1400 }, t);
+  api('time.save', { doc_id: a.doc.doc_id, task: 'Airbrushing', minutes: 150 }, t);
+  api('time.save', { doc_id: a.doc.doc_id, task: 'Sewing', minutes: 95, note: 'Lining' }, t);
+  api('costs.save', { category: 'supplies', description: 'Thread (bulk)', supplier: 'Joann', each_cents: 1999 }, t);
   const q = api('docs.save', { type: 'quote', customer_id: c2.customer_id, items: [Object.assign({}, jacket, { lines })] }, t).data;
   api('docs.markSent', { doc_id: q.doc.doc_id }, t);
   api('docs.save', { type: 'invoice', customer_id: c2.customer_id, items: [{ title: 'Custom Hat', qty: 1, details: { notes: 'Black cap, gold OES star.' }, lines: [{ label: 'Embroidered cap', amount_cents: 4500, kind: 'custom' }] }] }, t);

@@ -6,6 +6,7 @@ import { call, ApiError } from '../api.js';
 import { back } from '../router.js';
 import { formatCents, centsToInput, parseMoney } from '../money.js';
 import { catalogNote } from './products.js';
+import { typicalCostsEditor } from '../tracking.js';
 
 const KINDS = [
   { value: 'base', label: 'Normal fee' },
@@ -32,6 +33,8 @@ export default {
     const lines = store.data.templateLines
       .filter((l) => pkg && l.package_id === pkg.package_id)
       .map((l) => ({ template_line_id: l.template_line_id, label: l.label, amount: centsToInput(l.amount_cents), kind: l.kind }));
+
+    const typical = typicalCostsEditor((store.data.packageCosts || []).filter((c) => pkg && c.package_id === pkg.package_id));
 
     const name = textInput(pkg ? pkg.name : '', { maxlength: '100', autocomplete: 'off' });
     const priceNote = textInput(pkg ? pkg.price_note : '', { maxlength: '50', autocomplete: 'off' });
@@ -92,11 +95,17 @@ export default {
           }
           return { template_line_id: l.template_line_id, label: l.label, amount_cents: cents, kind: l.kind };
         });
+        const costs = typical.collect();
         const res = await call('catalog.savePackage', {
           package_id: pkg ? pkg.package_id : undefined, product_id: product.product_id,
           name: name.value, price_note: priceNote.value, active: active.input.checked, lines: out
         });
         setCatalog(res.catalog);
+        const before = JSON.stringify((store.data.packageCosts || []).filter((c) => c.package_id === res.id)
+          .map((c) => ({ category: c.category, description: c.description, amount_cents: c.amount_cents })));
+        if (JSON.stringify(costs) !== before) {
+          setCatalog((await call('catalog.savePackageCosts', { package_id: res.id, costs })).catalog);
+        }
         toast('Package saved');
         back('/catalog/products/' + encodeURIComponent(product.product_id));
       });
@@ -109,6 +118,9 @@ export default {
     editor,
     h('div', { class: 'line-total' }, h('span', null, 'Package total'), totalEl),
     h('div', { class: 'section' }, addLine),
+    h('h2', { class: 'label section' }, 'Typical costs (only you see these)'),
+    h('p', { class: 'small muted' }, 'What you usually spend to make one item with this package. New orders start with these costs, and you change them on the order if you paid something different.'),
+    typical.el,
     h('div', { class: 'form-actions' }, save));
 
     setChildren(main, h('p', { class: 'label', style: { marginBottom: '0' } }, product.name), catalogNote(), form);

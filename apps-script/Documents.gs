@@ -88,6 +88,7 @@ function saveDoc_(p) {
       it.lines.forEach(function (l) { l.doc_id = doc.doc_id; lines.push(l); });
     });
     appendRows_('DocLines', lines);
+    if (doc.type === 'invoice') syncAutoCosts_(doc.doc_id);
 
     return getDocById_(doc.doc_id);
   });
@@ -231,6 +232,7 @@ function getDocById_(docId, docRow) {
       ? progressFor_(items, readTable_('Checklist').filter(function (x) { return x.doc_id === docId; }), getCatalog_().products)
       : [],
     photos: readTable_('Photos').filter(function (x) { return x.doc_id === docId; }).map(clean_),
+    tracking: doc.type === 'invoice' ? trackingFor_(doc) : null,
     log: readTable_('Log').filter(function (x) { return x.doc_id === docId; }).map(clean_).reverse()
   };
 }
@@ -377,6 +379,7 @@ function convertQuote_(quote, opts) {
   appendRows_('Documents', [invoice]);
   appendRows_('DocItems', copy.items);
   appendRows_('DocLines', copy.lines);
+  syncAutoCosts_(invoice.doc_id);
 
   quote.status = 'converted';
   quote.converted_invoice_id = invoice.doc_id;
@@ -470,6 +473,7 @@ function voidDoc_(p) {
     doc.void_reason = reason;
     doc.updated_at = nowIso_();
     updateRow_('Documents', doc);
+    if (doc.type === 'invoice') voidAutoCosts_(doc.doc_id);
     logEvent_('void', doc.doc_id, 'Void: ' + reason);
     return getDocById_(doc.doc_id);
   });
@@ -540,6 +544,7 @@ function duplicateDoc_(p) {
     appendRows_('Documents', [doc]);
     appendRows_('DocItems', copy.items);
     appendRows_('DocLines', copy.lines);
+    if (doc.type === 'invoice') syncAutoCosts_(doc.doc_id);
     logEvent_('created', doc.doc_id, 'Copy of ' + src.number);
     return getDocById_(doc.doc_id);
   });

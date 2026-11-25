@@ -1,13 +1,14 @@
 // screens/settings-edit.js: edit settings (SPEC 6.10). One screen per section:
 // business (info and Zelle), rules (days and upfront percent), messages, terms, passcode.
-import { h, field, textInput, textArea, iconButton, toast, withBusy, setChildren } from '../ui.js';
+import { h, field, textInput, textArea, moneyInput, iconButton, toast, withBusy, setChildren } from '../ui.js';
 import { call, ApiError } from '../api.js';
 import { store } from '../store.js';
 import { back } from '../router.js';
 import { messageFor } from '../share.js';
+import { centsToInput, parseMoney } from '../money.js';
 
 const TITLES = {
-  business: 'Business & Zelle', rules: 'Rules & days', messages: 'Messages', terms: 'True Value Statement', passcode: 'Change passcode'
+  business: 'Business & Zelle', rules: 'Rules & days', messages: 'Messages', terms: 'True Value Statement', passcode: 'Change passcode', profit: 'Profit tracking'
 };
 
 export default {
@@ -16,7 +17,7 @@ export default {
   back: true,
   render(main, params) {
     const s = store.data.settings;
-    const build = { business, rules, messages, terms, passcode }[params.section];
+    const build = { business, rules, messages, terms, passcode, profit }[params.section];
     if (!build) {
       setChildren(main, h('div', { class: 'card empty' }, h('p', null, 'That page doesn\'t exist.'), h('a', { class: 'btn btn-secondary', href: '#/settings' }, 'Back to Settings')));
       return;
@@ -152,6 +153,21 @@ function terms(main, s) {
     if (!items.length) throw new ApiError('VALIDATION', 'Keep at least one item.');
     items.forEach((t, i) => { if (!t.title.trim() || !t.text.trim()) throw new ApiError('VALIDATION', 'Item ' + (i + 1) + ' needs a title and text.'); });
     return { terms_title: title.value.trim(), terms: items.map((t) => ({ title: t.title.trim(), text: t.text.trim() })) };
+  });
+}
+
+function profit(main, s) {
+  const rate = moneyInput(centsToInput(Number(s.hourly_rate_cents) || 0));
+  const tasks = textArea(s.work_tasks || '', { rows: '10', maxlength: '2000' });
+  settingsForm(main, [
+    field('Your hourly rate ($ per hour)', rate, 'What you want to pay yourself. Profit is shown before and after this. Starts at $20 as a placeholder.'),
+    field('Work tasks', tasks, 'One per line. You pick from these when you add time to an order.'),
+    h('p', { class: 'small muted' }, 'See the numbers on Home → Profit & costs. ', h('a', { href: '#/profit' }, 'Open Profit & costs'))
+  ], () => {
+    const cents = parseMoney(rate.value);
+    if (cents === null || cents < 0) throw new ApiError('VALIDATION', 'Please type an hourly rate, like 20 or 25.50.');
+    if (!tasks.value.trim()) throw new ApiError('VALIDATION', 'Keep at least one work task.');
+    return { hourly_rate_cents: cents, work_tasks: tasks.value };
   });
 }
 

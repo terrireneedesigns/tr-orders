@@ -7,7 +7,7 @@
  *   { "ok": true, "data": ... }  or  { "ok": false, "error": { "code", "message" } }
  */
 
-var API_VERSION = '0.8.0';
+var API_VERSION = '0.9.0';
 var SESSION_DAYS = 180;
 var LOGIN_MAX_FAILS = 10;
 var LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -52,6 +52,12 @@ function routes_() {
     'catalog.saveAddOn': { auth: true, fn: saveAddOn_ },
     'catalog.savePatch': { auth: true, fn: savePatch_ },
     'catalog.reorder': { auth: true, fn: reorderCatalog_ },
+    'catalog.savePackageCosts': { auth: true, fn: savePackageCosts_ },
+    'costs.save': { auth: true, fn: saveCost_ },
+    'costs.delete': { auth: true, fn: deleteCost_ },
+    'time.save': { auth: true, fn: saveTime_ },
+    'time.delete': { auth: true, fn: deleteTime_ },
+    'profit.get': { auth: true, fn: getProfit_ },
     'backup.run': { auth: true, fn: runBackup_ }
   };
 }
@@ -239,6 +245,7 @@ function bootstrap_(p) {
     packages: cat.packages,
     templateLines: cat.templateLines,
     addOns: cat.addOns,
+    packageCosts: cat.packageCosts,
     patches: cat.patches,
     customers: customers
   };

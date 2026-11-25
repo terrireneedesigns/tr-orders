@@ -39,27 +39,30 @@ function setupTabs_(ss, report) {
     }
     var lastCol = sh.getLastColumn();
     var have = lastCol ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String) : [];
-    var missing = cols.filter(function (c) { return have.indexOf(c) === -1; });
-    if (missing.length) {
-      sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing]);
-      if (have.length) report.push('Added columns to ' + name + ': ' + missing.join(', '));
-    }
-    var all = have.concat(missing);
-    var header = sh.getRange(1, 1, 1, all.length);
-    header.setFontWeight('bold').setBackground('#201C19').setFontColor('#F9F6F0');
-    sh.setFrozenRows(1);
-    // Text columns are plain text so values like "01" and "623-521-6235" stay exactly as typed.
-    if (sh.getMaxRows() < 2) sh.insertRowsAfter(1, 999);
-    all.forEach(function (c, i) {
-      sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat(formatFor_(c));
-    });
-    delete HEADER_CACHE_[name];
+    var missing = prepareTab_(sh, have, cols);
+    if (missing.length && have.length) report.push('Added columns to ' + name + ': ' + missing.join(', '));
   });
 
   var blank = ss.getSheetByName('Sheet1');
   if (blank && blank.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(blank);
 
   report.push(created.length ? 'Created tabs: ' + created.join(', ') : 'All tabs already exist.');
+}
+
+/** Add missing header columns, style the header and set column formats. Returns the columns added. */
+function prepareTab_(sh, have, cols) {
+  var missing = cols.filter(function (c) { return have.indexOf(c) === -1; });
+  if (missing.length) sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing]);
+  var all = have.concat(missing);
+  sh.getRange(1, 1, 1, all.length).setFontWeight('bold').setBackground('#201C19').setFontColor('#F9F6F0');
+  sh.setFrozenRows(1);
+  // Text columns are plain text so values like "01" and "623-521-6235" stay exactly as typed.
+  if (sh.getMaxRows() < 2) sh.insertRowsAfter(1, 999);
+  all.forEach(function (c, i) {
+    sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat(formatFor_(c));
+  });
+  delete HEADER_CACHE_[sh.getName()];
+  return missing;
 }
 
 /* ---------- settings ---------- */
@@ -234,6 +237,7 @@ var SEED_SETTINGS = [
   ['next_quote_no', '1001'],
   ['next_order_no', '1001'],
   ['notify_email', 'terrireneedesigns@gmail.com'],
+  ['hourly_rate_cents', '2000'],
   ['msg_quote', 'Hi {first_name}, here is your quote {number} from Terri Renee Evolvé. Review and approve here: {link}'],
   ['msg_invoice', 'Hi {first_name}, here is your invoice {number} from Terri Renee Evolvé for {total}. Payment details are on the page: {link}'],
   ['msg_receipt', 'Thank you, {first_name}! Your payment for {number} is received: {link}'],
@@ -334,7 +338,7 @@ var SEED_PATCHES = [
 
 /* ---------- before going live: clear test orders ---------- */
 
-var ORDER_TABS = ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 'Photos', 'Log'];
+var ORDER_TABS = ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 'Photos', 'Costs', 'TimeLog', 'Log'];
 
 /**
  * Run from the editor once testing is finished. Makes a backup copy first, then removes every
@@ -345,7 +349,7 @@ var ORDER_TABS = ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 
 function clearTestOrders() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.prompt('Clear test orders',
-    'This removes ALL quotes, invoices, payments, checklists, order photos and activity, and restarts numbering at ' +
+    'This removes ALL quotes, invoices, payments, checklists, order photos, costs, time entries and activity, and restarts numbering at ' +
     'Q-1001 and TR-1001. A backup copy is made first. Products, patches and settings stay.\n\nType CLEAR to continue.',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK || r.getResponseText().trim() !== 'CLEAR') {

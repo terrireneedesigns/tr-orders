@@ -32,6 +32,10 @@ var SCHEMA = {
   Payments: ['payment_id', 'doc_id', 'amount_cents', 'method', 'paid_on', 'note', 'created_at', 'voided'],
   Checklist: ['doc_id', 'item_id', 'step_no', 'label', 'done_at'],
   Photos: ['photo_id', 'doc_id', 'item_id', 'drive_file_id', 'caption', 'created_at'],
+  Costs: ['cost_id', 'doc_id', 'item_id', 'category', 'description', 'supplier', 'qty', 'each_cents', 'amount_cents',
+    'spent_on', 'auto', 'created_at', 'updated_at', 'voided'],
+  TimeLog: ['time_id', 'doc_id', 'worked_on', 'task', 'minutes', 'note', 'created_at', 'voided'],
+  PackageCosts: ['package_cost_id', 'package_id', 'category', 'description', 'amount_cents', 'sort'],
   Sessions: ['token_hash', 'created_at', 'expires_at', 'label', 'revoked'],
   Log: ['ts', 'action', 'doc_id', 'detail']
 };
@@ -39,12 +43,13 @@ var SCHEMA = {
 /** Columns stored as numbers. Everything not listed here or in BOOL_COLS is plain text. */
 var NUM_COLS = {
   sort: 1, amount_cents: 1, view_count: 1, upfront_percent: 1, discount_cents: 1,
-  subtotal_cents: 1, total_cents: 1, paid_cents: 1, qty: 1, step_no: 1
+  subtotal_cents: 1, total_cents: 1, paid_cents: 1, qty: 1, step_no: 1,
+  each_cents: 1, minutes: 1
 };
 
 /** Columns stored as TRUE/FALSE. */
 var BOOL_COLS = {
-  archived: 1, active: 1, price_editable: 1, terms_accepted: 1, voided: 1, revoked: 1
+  archived: 1, active: 1, price_editable: 1, terms_accepted: 1, voided: 1, revoked: 1, auto: 1
 };
 
 /* ---------- errors ---------- */
@@ -144,8 +149,16 @@ function withLock_(fn) {
 
 var HEADER_CACHE_ = {};
 
+/** Tabs added after launch: created on first use, so setup() doesn't need to run again. */
+var AUTO_TABS = { Costs: 1, TimeLog: 1, PackageCosts: 1 };
+
 function sheet_(name) {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(name);
+  if (!sh && AUTO_TABS[name]) {
+    sh = ss.insertSheet(name);
+    prepareTab_(sh, [], SCHEMA[name]);
+  }
   if (!sh) throw appError('SETUP', 'The "' + name + '" tab is missing. Run setup() in Apps Script.');
   return sh;
 }
@@ -340,11 +353,17 @@ function bySort_(a, b) {
 
 var NUMERIC_SETTINGS = {
   upfront_percent_default: 1, unpaid_flag_days: 1, ready_flag_days: 1,
-  quote_expiry_days: 1, next_quote_no: 1, next_order_no: 1
+  quote_expiry_days: 1, next_quote_no: 1, next_order_no: 1, hourly_rate_cents: 1
 };
 
-var CACHE_SETTINGS = 'settings_v1';
-var CACHE_CATALOG = 'catalog_v1';
+var CACHE_SETTINGS = 'settings_v2';
+var CACHE_CATALOG = 'catalog_v2';
+
+/** Settings added after launch: used until the key is saved, so setup() doesn't need to run again. */
+var SETTING_DEFAULTS = {
+  hourly_rate_cents: 2000,
+  work_tasks: 'Design\nCutting\nSewing\nAirbrushing\nPatches / embroidery\nFitting\nFinishing / pressing\nPhotos / listing\nShipping / packing\nOther'
+};
 
 /** Settings as an object. Numeric settings are numbers; terms_json is parsed into `terms`. */
 function getSettings_() {
@@ -355,6 +374,9 @@ function getSettings_() {
   readTable_('Settings').forEach(function (r) {
     if (!r.key) return;
     s[r.key] = NUMERIC_SETTINGS[r.key] ? Number(r.value) : r.value;
+  });
+  Object.keys(SETTING_DEFAULTS).forEach(function (k) {
+    if (s[k] === undefined || s[k] === '') s[k] = SETTING_DEFAULTS[k];
   });
   try {
     s.terms = JSON.parse(s.terms_json || '[]');
@@ -409,6 +431,19 @@ var SETTINGS_RULES = {
   msg_ready: function (v) { return vStr_(v, 'Ready message', 1000, true); },
   terms_title: function (v) { return vStr_(v, 'Terms title', 100, true); },
   daily_digest: function (v) { return vEnum_(v, ['on', 'off'], 'Daily summary'); },
+  hourly_rate_cents: function (v) {
+    var n = Number(v);
+    if (!Number.isInteger(n) || n < 0 || n > 100000) throw appError('VALIDATION', 'Hourly rate must be from $0 to $1,000.');
+    return String(n);
+  },
+  work_tasks: function (v) {
+    var list = String(v === null || v === undefined ? '' : v).split('\n').map(function (t) { return t.trim(); })
+      .filter(function (t, i, all) { return t && all.indexOf(t) === i; });
+    if (!list.length) throw appError('VALIDATION', 'Keep at least one work task.');
+    if (list.length > 30) throw appError('VALIDATION', 'Up to 30 work tasks.');
+    list.forEach(function (t) { if (t.length > 60) throw appError('VALIDATION', 'Each work task can be up to 60 characters.'); });
+    return list.join('\n');
+  },
   terms: function (v) {
     if (!Array.isArray(v) || v.length > 30) throw appError('VALIDATION', 'The terms are not valid.');
     return JSON.stringify(v.map(function (t, i) {

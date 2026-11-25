@@ -18,7 +18,7 @@ export async function loadBootstrap() {
 /** Replace the catalog parts of the store with a fresh catalog from a save. */
 export function setCatalog(cat) {
   if (!store.data || !cat) return;
-  for (const k of ['products', 'packages', 'templateLines', 'addOns', 'patches']) store.data[k] = cat[k];
+  for (const k of ['products', 'packages', 'templateLines', 'addOns', 'patches', 'packageCosts']) store.data[k] = cat[k] || [];
 }
 
 /** Add or update one customer in the store (keeps the list sorted by name). */

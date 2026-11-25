@@ -65,7 +65,8 @@ export default {
         h('a', { class: 'btn btn-big', href: '#/new/order' }, '+ New Order'),
         h('a', { class: 'btn btn-big btn-secondary', href: '#/new/quote' }, '+ New Quote')),
       h('section', { class: 'section' }, h('h2', { class: 'label' }, 'Needs attention'), needsSection()),
-      h('section', { class: 'section' }, h('h2', { class: 'label' }, 'Snapshot'), snapshotSection()));
+      h('section', { class: 'section' }, h('h2', { class: 'label' }, 'Snapshot'), snapshotSection(),
+        h('a', { class: 'btn btn-secondary btn-block', href: '#/profit', style: { marginTop: '12px' } }, 'Profit & costs')));
 
     const load = async () => {
       const d = await call('dashboard.get');

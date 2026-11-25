@@ -282,7 +282,7 @@ test('setup is safe to re-run (no duplicates, keeps passcode)', () => {
   const before = env.props.PASSCODE_HASH;
   env.answers.push('NO');
   env.ctx.setup();
-  eq(table('Products').length, 3); eq(table('Patches').length, 45); eq(table('Settings').length, 21);
+  eq(table('Products').length, 3); eq(table('Patches').length, 45); eq(table('Settings').length, 22);
   eq(env.triggers.length, 1); eq(env.props.PASSCODE_HASH, before);
   eq(env.root.children.filter(c => c.name === 'TR Orders').length, 1);
 });
@@ -325,8 +325,8 @@ test('bootstrap returns settings, catalog and customers', () => {
 });
 
 test('catalog is cached, and onEdit clears the cache', () => {
-  ok(env.cache.catalog_v1 && env.cache.settings_v1);
-  env.ctx.onEdit({}); ok(!env.cache.catalog_v1 && !env.cache.settings_v1);
+  ok(env.cache.catalog_v2 && env.cache.settings_v2);
+  env.ctx.onEdit({}); ok(!env.cache.catalog_v2 && !env.cache.settings_v2);
 });
 
 test('logout revokes only that session; logoutAll revokes all', () => {
@@ -1072,6 +1072,186 @@ test('patch photo: upload replaces the old one and shows on the catalog', () => 
   eq(call(env, 'photos.upload', { patch_no: '999', data: tinyJpeg }, t7).error.code, 'NOT_FOUND');
 });
 
+
+/* ---------------- profit tracking: costs, time, typical costs ---------------- */
+// Own fresh back end, so the profit numbers are exact.
+const penv = makeEnv(['123456', '123456']);
+penv.ctx.setup();
+const PT = call(penv, 'auth.login', { passcode: '123456' }).data.token;
+const pc = (action, payload) => call(penv, action, payload, PT);
+const ptable = (n) => vm.runInContext(`readTable_(${JSON.stringify(n)})`, penv.ctx);
+const pboot = pc('bootstrap', {}).data;
+const pStd = pboot.packages.find(x => x.name === 'Standard');
+const pPrem = pboot.packages.find(x => x.name === 'Premium');
+const pLines = (pk) => pboot.templateLines.filter(l => l.package_id === pk.package_id).map(l => ({ label: l.label, amount_cents: l.amount_cents, kind: l.kind }));
+const pCust = pc('customers.save', { name: 'Profit Tester', phone: '480-555-0100' }).data.customer.customer_id;
+const pItem = (pk, over) => Object.assign({ product_id: pk.product_id, package_id: pk.package_id, title: 'Jacket ' + pk.name, qty: 1, details: {}, lines: pLines(pk) }, over || {});
+const pDoc = (over) => Object.assign({ type: 'invoice', customer_id: pCust, items: [pItem(pStd)] }, over || {});
+
+test('profit: new tabs exist, settings default to $20/hour and her work tasks', () => {
+  ['Costs', 'TimeLog', 'PackageCosts'].forEach(n => ok(penv.ss.getSheetByName(n), n));
+  eq(pboot.settings.hourly_rate_cents, 2000);
+  ok(pboot.settings.work_tasks.split('\n').indexOf('Airbrushing') !== -1);
+  eq(pboot.packageCosts, []);
+});
+
+test('profit: missing tabs are created on first use (no need to run setup again)', () => {
+  penv.ss.deleteSheet(penv.ss.getSheetByName('PackageCosts'));
+  vm.runInContext('delete HEADER_CACHE_.PackageCosts; clearCaches_();', penv.ctx);
+  const b = pc('bootstrap', {}); eq(b.ok, true, JSON.stringify(b.error));
+  eq(penv.ss.getSheetByName('PackageCosts').data[0], vm.runInContext('SCHEMA.PackageCosts', penv.ctx));
+});
+
+test('profit: settings save hourly rate and work tasks (trimmed, no repeats); bad values refused', () => {
+  const s = pc('settings.save', { values: { hourly_rate_cents: 2500, work_tasks: ' Sewing \nSewing\n\nBeading ' } }).data;
+  eq(s.hourly_rate_cents, 2500); eq(s.work_tasks, 'Sewing\nBeading');
+  eq(pc('settings.save', { values: { hourly_rate_cents: -1 } }).error.code, 'VALIDATION');
+  eq(pc('settings.save', { values: { hourly_rate_cents: 12.5 } }).error.code, 'VALIDATION');
+  eq(pc('settings.save', { values: { work_tasks: '  \n ' } }).error.code, 'VALIDATION');
+  pc('settings.save', { values: { hourly_rate_cents: 2000 } });
+});
+
+test('profit: typical costs per package save, replace and validate', () => {
+  const r = pc('catalog.savePackageCosts', { package_id: pStd.package_id, costs: [
+    { category: 'jacket', description: 'Bomber blank', amount_cents: 3800 },
+    { category: 'fabric', description: 'Lining', amount_cents: 1250 }] });
+  eq(r.ok, true, JSON.stringify(r.error));
+  eq(r.data.catalog.packageCosts.filter(x => x.package_id === pStd.package_id).map(x => x.amount_cents), [3800, 1250]);
+  pc('catalog.savePackageCosts', { package_id: pPrem.package_id, costs: [{ category: 'jacket', description: 'Premium blank', amount_cents: 5000 }] });
+  eq(pc('catalog.savePackageCosts', { package_id: pStd.package_id, costs: [{ category: 'food', amount_cents: 1 }] }).error.code, 'VALIDATION');
+  eq(pc('catalog.savePackageCosts', { package_id: pStd.package_id, costs: [{ category: 'jacket', amount_cents: -5 }] }).error.code, 'VALIDATION');
+  eq(pc('catalog.savePackageCosts', { package_id: 'PKG_nope', costs: [] }).error.code, 'NOT_FOUND');
+  eq(pc('bootstrap', {}).data.packageCosts.length, 3);
+});
+
+let pInv;
+test('profit: a new invoice gets the typical costs (x qty) and shows profit before and after labor', () => {
+  const r = pc('docs.save', pDoc({ items: [pItem(pStd, { qty: 2 })] }));
+  eq(r.ok, true, JSON.stringify(r.error)); pInv = r.data;
+  const tr = pInv.tracking;
+  eq(tr.costs.map(c => [c.category, c.qty, c.each_cents, c.amount_cents, c.auto]), [['jacket', 2, 3800, 7600, true], ['fabric', 2, 1250, 2500, true]]);
+  eq(tr.spent_cents, 10100); eq(tr.income_cents, 55000); eq(tr.profit_cents, 44900);
+  eq(tr.minutes, 0); eq(tr.labor_cents, 0); eq(tr.profit_after_labor_cents, 44900); eq(tr.hourly_rate_cents, 2000);
+});
+
+test('profit: auto costs follow qty; an edited one stays as typed; a deleted one is not added back', () => {
+  const items = pInv.items.map(it => Object.assign({}, it, { qty: 1 }));
+  let d = pc('docs.save', pDoc({ doc_id: pInv.doc.doc_id, items })).data;
+  eq(d.tracking.costs.map(c => c.amount_cents), [3800, 1250]);
+  const jacket = d.tracking.costs.find(c => c.category === 'jacket');
+  const fabric = d.tracking.costs.find(c => c.category === 'fabric');
+  const e = pc('costs.save', { cost_id: jacket.cost_id, category: 'jacket', description: 'Bomber blank (sale)', qty: 1, each_cents: 3200, spent_on: '2026-11-20' });
+  eq(e.ok, true, JSON.stringify(e.error)); eq(e.data.cost.auto, false); eq(e.data.tracking.spent_cents, 4450);
+  eq(pc('costs.delete', { cost_id: fabric.cost_id }).data.tracking.spent_cents, 3200);
+  d = pc('docs.save', pDoc({ doc_id: pInv.doc.doc_id, items: d.items.map(it => Object.assign({}, it, { qty: 3 })) })).data;
+  eq(d.tracking.costs.map(c => [c.description, c.amount_cents]), [['Bomber blank (sale)', 3200]], 'edited kept, deleted not re-added');
+  pInv = pc('docs.save', pDoc({ doc_id: pInv.doc.doc_id, items: d.items.map(it => Object.assign({}, it, { qty: 1 })) })).data;
+});
+
+test('profit: adding a second item adds its typical costs; removing it removes them', () => {
+  let d = pc('docs.save', pDoc({ doc_id: pInv.doc.doc_id, items: pInv.items.concat([pItem(pPrem)]) })).data;
+  eq(d.tracking.costs.map(c => c.description).sort(), ['Bomber blank (sale)', 'Premium blank']);
+  d = pc('docs.save', pDoc({ doc_id: pInv.doc.doc_id, items: [d.items[0]] })).data;
+  eq(d.tracking.costs.map(c => c.description), ['Bomber blank (sale)']);
+  pInv = d;
+});
+
+test('profit: quotes have no costs; converting one gives the invoice its typical costs', () => {
+  const q = pc('docs.save', pDoc({ type: 'quote' })).data;
+  eq(q.tracking, null); eq(ptable('Costs').filter(c => c.doc_id === q.doc.doc_id).length, 0);
+  eq(pc('costs.save', { doc_id: q.doc.doc_id, category: 'jacket', each_cents: 100 }).error.code, 'VALIDATION');
+  const inv2 = pc('docs.convertToInvoice', { doc_id: q.doc.doc_id }).data;
+  eq(inv2.tracking.spent_cents, 5050);
+  pc('docs.void', { doc_id: inv2.doc.doc_id, reason: 'test' });
+});
+
+test('profit: costs on an order and general costs; validation; delete', () => {
+  const a = pc('costs.save', { doc_id: pInv.doc.doc_id, category: 'patches', description: 'Square & compass', supplier: 'Patch maker', qty: 2, each_cents: 1400, spent_on: '2026-11-21' });
+  eq(a.ok, true, JSON.stringify(a.error)); eq(a.data.cost.amount_cents, 2800); eq(a.data.tracking.spent_cents, 6000);
+  const g = pc('costs.save', { category: 'supplies', description: 'Thread (bulk)', each_cents: 1999 });
+  eq(g.ok, true, JSON.stringify(g.error)); eq(g.data.cost.doc_id, ''); eq(g.data.tracking, null); ok(/^\d{4}-\d{2}-\d{2}$/.test(g.data.cost.spent_on));
+  eq(pc('costs.save', { category: 'nope', each_cents: 1 }).error.code, 'VALIDATION');
+  eq(pc('costs.save', { category: 'other', each_cents: -1 }).error.code, 'VALIDATION');
+  eq(pc('costs.save', { category: 'other', each_cents: 100, qty: 0 }).error.code, 'VALIDATION');
+  eq(pc('costs.save', { category: 'other', each_cents: 100, spent_on: '11/21/2026' }).error.code, 'VALIDATION');
+  eq(pc('costs.save', { doc_id: 'D_nope', category: 'other', each_cents: 100 }).error.code, 'NOT_FOUND');
+  const tmp = pc('costs.save', { category: 'other', description: 'oops', each_cents: 500 }).data.cost;
+  eq(pc('costs.delete', { cost_id: tmp.cost_id }).ok, true);
+  eq(pc('costs.delete', { cost_id: tmp.cost_id }).error.code, 'NOT_FOUND');
+  ok(ptable('Costs').find(c => c.cost_id === tmp.cost_id).voided, 'kept as void');
+});
+
+test('profit: time entries add hours and labor value; edit, delete, validation', () => {
+  const a = pc('time.save', { doc_id: pInv.doc.doc_id, worked_on: '2026-11-21', task: 'Airbrushing', minutes: 150 });
+  eq(a.ok, true, JSON.stringify(a.error)); eq(a.data.tracking.minutes, 150); eq(a.data.tracking.labor_cents, 5000);
+  const b = pc('time.save', { doc_id: pInv.doc.doc_id, task: 'Sewing', minutes: 45, note: 'Lining' }).data.tracking;
+  eq(b.minutes, 195); eq(b.labor_cents, 6500); eq(b.profit_after_labor_cents, b.profit_cents - 6500);
+  const sew = b.time.find(x => x.task === 'Sewing');
+  eq(pc('time.save', { time_id: sew.time_id, task: 'Sewing', minutes: 60, worked_on: sew.worked_on }).data.tracking.minutes, 210);
+  const tmp = pc('time.save', { doc_id: pInv.doc.doc_id, task: 'Other', minutes: 5 }).data.tracking.time.find(x => x.task === 'Other');
+  eq(pc('time.delete', { time_id: tmp.time_id }).data.tracking.minutes, 210);
+  eq(pc('time.save', { doc_id: pInv.doc.doc_id, task: 'Sewing', minutes: 0 }).error.code, 'VALIDATION');
+  eq(pc('time.save', { doc_id: pInv.doc.doc_id, task: 'Sewing', minutes: 1441 }).error.code, 'VALIDATION');
+  eq(pc('time.save', { doc_id: pInv.doc.doc_id, task: '', minutes: 10 }).error.code, 'VALIDATION');
+  eq(pc('docs.get', { doc_id: pInv.doc.doc_id }).data.tracking.minutes, 210);
+});
+
+test('profit: voiding an order removes its automatic costs but keeps typed ones', () => {
+  const d = pc('docs.save', pDoc()).data;
+  pc('costs.save', { doc_id: d.doc.doc_id, category: 'shipping', each_cents: 840 });
+  pc('docs.void', { doc_id: d.doc.doc_id, reason: 'Customer changed mind' });
+  const left = ptable('Costs').filter(c => c.doc_id === d.doc.doc_id && !c.voided);
+  eq(left.map(c => c.category), ['shipping']);
+  eq(pc('costs.save', { doc_id: d.doc.doc_id, category: 'other', each_cents: 1 }).error.code, 'VALIDATION');
+});
+
+test('profit: summary adds up orders, general costs, hours; drafts, quotes and void left out', () => {
+  // pInv: $275 charged, costs 3200 + 2800 = 6000, 210 min. Send it and take $100.
+  pc('docs.markSent', { doc_id: pInv.doc.doc_id });
+  pc('payments.add', { doc_id: pInv.doc.doc_id, amount_cents: 10000, method: 'cash' });
+  // A cancelled order: $275 charged, $50 kept, typical costs 5050.
+  const c = pc('docs.save', pDoc()).data;
+  pc('docs.markSent', { doc_id: c.doc.doc_id });
+  pc('payments.add', { doc_id: c.doc.doc_id, amount_cents: 5000, method: 'zelle' });
+  pc('docs.setStage', { doc_id: c.doc.doc_id, stage: 'cancelled', reason: 'test' });
+  pc('docs.save', pDoc()); // a draft: not counted
+  const r = pc('profit.get', {}); eq(r.ok, true, JSON.stringify(r.error));
+  const t = r.data.totals;
+  eq(t.orders, 2);
+  eq(t.income_cents, 27500 + 5000); eq(t.received_cents, 15000); eq(t.owed_cents, 17500);
+  eq(t.order_costs_cents, 6000 + 5050); eq(t.general_costs_cents, 1999); eq(t.spent_cents, 13049);
+  eq(t.profit_cents, 32500 - 13049); eq(t.minutes, 210); eq(t.labor_cents, 7000);
+  eq(t.profit_after_labor_cents, 32500 - 13049 - 7000);
+  eq(t.per_hour_cents, Math.round((32500 - 13049) * 60 / 210));
+  const cat = Object.fromEntries(r.data.by_category.map(x => [x.category, x.cents]));
+  eq(cat, { jacket: 3200 + 3800, fabric: 1250, patches: 2800, supplies: 1999, shipping: 0, other: 0 });
+  eq(r.data.by_product.map(x => [x.product, x.orders]), [['Custom Bomber Jacket', 2]]);
+  eq(r.data.orders.map(o => o.number).sort(), [pInv.doc.number, c.doc.number].sort());
+  eq(r.data.general_costs.map(g => g.description), ['Thread (bulk)']);
+  eq(t.orders_without_costs, 0);
+});
+
+test('profit: date range filters orders by order date and general costs by purchase date', () => {
+  const none = pc('profit.get', { from: '2000-01-01', to: '2000-12-31' }).data.totals;
+  eq([none.orders, none.income_cents, none.spent_cents, none.per_hour_cents], [0, 0, 0, null]);
+  pc('costs.save', { category: 'other', description: 'Old scissors', each_cents: 2500, spent_on: '2000-06-01' });
+  const old = pc('profit.get', { from: '2000-01-01', to: '2000-12-31' }).data;
+  eq(old.totals.general_costs_cents, 2500); eq(old.totals.profit_cents, -2500);
+  eq(pc('profit.get', { from: 'yesterday' }).error.code, 'VALIDATION');
+});
+
+test('profit: costs and time never reach the customer page', () => {
+  const pub = JSON.stringify(call(penv, 'public.getDocument', { public_id: pInv.doc.public_id }));
+  ok(pub.indexOf('"ok":true') !== -1, pub.slice(0, 200));
+  ['tracking', 'each_cents', 'Bomber blank', 'Airbrushing', 'minutes', 'labor'].forEach(w => ok(pub.indexOf(w) === -1, 'leaked ' + w));
+});
+
+test('profit: clearTestOrders also clears costs and time', () => {
+  penv.answers.push('CLEAR', 'NO');
+  eq(penv.ctx.clearTestOrders(), 'cleared');
+  eq(ptable('Costs').length, 0); eq(ptable('TimeLog').length, 0);
+  eq(ptable('PackageCosts').length, 3, 'typical costs kept');
+});
 
 /* ---------------- milestone 8: settings editing, launch clean-up ---------------- */
 

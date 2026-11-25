@@ -7,7 +7,7 @@
 // sw.js is how the app notices a release: the new version downloads every file fresh, takes
 // over, and the app reloads itself (see js/app.js).
 
-const VERSION = '0.8.2';
+const VERSION = '0.9.0';
 const SHELL_CACHE = 'tr-shell-' + VERSION;
 const FONT_CACHE = 'tr-fonts-v1';
 
@@ -26,6 +26,7 @@ const SHELL = [
   'js/rules.js',
   'js/share.js',
   'js/photos.js',
+  'js/tracking.js',
   'js/app.js',
   'js/screens/login.js',
   'js/screens/home.js',
@@ -43,6 +44,7 @@ const SHELL = [
   'js/screens/order-item.js',
   'js/screens/order-detail.js',
   'js/screens/order-actions.js',
+  'js/screens/profit.js',
   'assets/logo-full-sm.png',
   'assets/logo-monogram-sm.png',
   'assets/icon-180.png',

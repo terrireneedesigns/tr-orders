@@ -11,6 +11,7 @@ import { statusBadges } from './orders.js';
 import { sendMessage, recordShared, customerLink } from '../share.js';
 import { recordPaymentSheet, reasonSheet, stageSheet, moreSheet, offerSheet } from './order-actions.js';
 import { pickPhoto, resizePhoto, photoSrc } from '../photos.js';
+import { trackingSection } from '../tracking.js';
 
 export { customerLink };
 
@@ -347,6 +348,7 @@ export default {
 
         progressSection(),
         paymentsSection(),
+        trackingSection(res, (tracking) => { res.tracking = tracking; draw(); }),
 
         h('section', { class: 'section' },
           h('h2', { class: 'label' }, 'Items'),

@@ -5,6 +5,7 @@ import { call, clearToken } from '../api.js';
 import { h, confirmDialog, toast, setChildren, toggleRow, showError, formatDateTime } from '../ui.js';
 import { store, loadBootstrap } from '../store.js';
 import { signedOut } from '../app.js';
+import { formatCents } from '../money.js';
 
 export default {
   title: 'Settings',
@@ -20,6 +21,7 @@ export default {
             navRow('rules', 'Rules & days', 'Overdue after ' + s.unpaid_flag_days + ' days · quotes last ' + s.quote_expiry_days + ' days'),
             navRow('messages', 'Messages', 'What the texts and emails say'),
             navRow('terms', s.terms_title || 'True Value Statement', (s.terms || []).length + ' items'),
+            navRow('profit', 'Profit tracking', 'Your hourly rate ' + formatCents(Number(s.hourly_rate_cents) || 0) + ' · work tasks'),
             navRow('passcode', 'Change passcode', 'Shared by Terri and Autumn'))),
 
         h('section', { class: 'section' },

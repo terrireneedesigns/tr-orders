@@ -18,6 +18,7 @@ import settings from './screens/settings.js';
 import settingsEdit from './screens/settings-edit.js';
 import orderEdit from './screens/order-edit.js';
 import orderDetail from './screens/order-detail.js';
+import profit from './screens/profit.js';
 
 const root = document.getElementById('app');
 
@@ -116,6 +117,7 @@ route('/catalog/products/new', (p) => mount(productEdit, p));
 route('/catalog/products/:id', (p) => mount(productEdit, p));
 route('/catalog/packages/new', (p) => mount(packageEdit, p));
 route('/catalog/packages/:id', (p) => mount(packageEdit, p));
+route('/profit', (p) => mount(profit, p));
 route('/settings', () => mount(settings));
 route('/settings/:section', (p) => mount(settingsEdit, p));
 route('/new/:type', (p) => mount(orderEdit, p));
