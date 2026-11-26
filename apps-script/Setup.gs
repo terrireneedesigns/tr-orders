@@ -252,10 +252,9 @@ var JACKET_STANDARD_LINES = [
   ['Bomber jacket (men\'s or women\'s)', 8500, 'base'],
   ['Large back patch', 1800, 'base'],
   ['Chest and sleeve patches (3 × $10)', 3000, 'base'],
-  ['Setup: open the lining, close it so it looks untouched', 4000, 'base'],
+  ['Setup: open the lining, close it so it looks untouched', 3700, 'base'],
   ['Sew on main back patch', 4500, 'base'],
-  ['Sew on chest left, chest right and sleeve (3 × $20)', 6000, 'base'],
-  ['Package savings', -300, 'savings']
+  ['Sew on chest left, chest right and sleeve (3 × $20)', 6000, 'base']
 ];
 var PREMIUM_UPGRADE_LINE = ['Premium package: upgraded patches (chenille, larger embroidered or custom-made)', 6000, 'upgrade'];
 var COLLECTOR_UPGRADE_LINE = ['Collector\'s package: gift packaging, priority turnaround', 7000, 'upgrade'];

@@ -150,3 +150,9 @@ Choices made where SPEC.md left room, newest milestone last.
 9. **Found in passing:** dropdowns had lost their arrow, because a later `background:` rule on `.input` hid it. It now sets only the background colour.
 10. **New files:** `apps-script/Costs.gs`, `js/tracking.js`, `js/screens/profit.js`. API 0.9.0, app 0.9.0.
 11. **Her spreadsheet data was imported once (Nov 26, 2026).** Only the Patches tab had real entries: 33 patch purchases from Oct 8 to Nov 22, $668.98 in all. Its "Order #" column held the shops' order numbers, not her jacket orders, so each row became a **general cost** (category Patches) at the row's total including shipping/tax. Where she typed a total over the formula, her typed total was kept. Patch name, shop order number, maker, quantity and date are kept. The import ran from a one-off Apps Script function that adds only rows missing from the Costs tab. It is git-ignored (`apps-script/ImportPatches.gs`) and never committed, because this repo is public; it can be deleted from Apps Script once the data is in.
+
+## Nov 26, 2026: package savings line removed
+
+1. **The "Package savings −$3.00" line is gone from the jacket packages**, and prices stay the same ($275 / $335 / $405). The $3 now comes off "Setup: open the lining…" ($40 → $37), which is also the new seed for fresh setups.
+2. **Existing data:** `removePackageSavings()` (new `Migrate.gs`, run once from the editor, safe to run again) changes the three packages and every **unsent, unpaid draft** quote or invoice the same way, so their totals don't change. Anything already sent, approved or paid keeps its line, so nothing a customer has seen changes. A package or draft with no "Setup" line is left alone and listed in the result.
+3. The "Package savings (minus)" line type stays available in the package editor, if Terri wants a savings line again.

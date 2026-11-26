@@ -244,7 +244,7 @@ test('package template lines total $275 / $335 / $405 (acceptance 1-3)', () => {
   const pk = table('Packages'), tl = table('TemplateLines');
   const sum = (name) => tl.filter(l => l.package_id === pk.find(p => p.name === name).package_id).reduce((a, l) => a + l.amount_cents, 0);
   eq(sum('Standard'), 27500); eq(sum('Premium'), 33500); eq(sum("Collector's"), 40500);
-  eq(tl.filter(l => l.kind === 'savings').length, 3);
+  eq(tl.filter(l => l.kind === 'savings').length, 0, 'no package savings line (removed Nov 2026)');
 });
 
 test('hat and purse have one empty Custom package each', () => {
@@ -318,7 +318,7 @@ test('bootstrap returns settings, catalog and customers', () => {
   const r = call(env, 'bootstrap', {}, token); eq(r.ok, true);
   const d = r.data;
   eq(d.products.map(p => p.name), ['Custom Bomber Jacket', 'Custom Hat', 'Custom Purse']);
-  eq(d.packages.length, 5); eq(d.templateLines.length, 7 + 8 + 9); eq(d.addOns.length, 6);
+  eq(d.packages.length, 5); eq(d.templateLines.length, 6 + 7 + 8); eq(d.addOns.length, 6);
   eq(d.patches.length, 45); eq(d.patches[0].patch_no, '01'); eq(d.patches[44].patch_no, '45');
   eq(d.customers, []); eq(d.settings.business_name, 'Terri Renee Evolvé');
   ok(d.sheetUrl); ok(!('_row' in d.products[0]));
@@ -432,7 +432,7 @@ test('saveTemplateLines replaces one package (fewer lines clears leftover rows)'
   const r = call(env, 'catalog.saveTemplateLines', { package_id: pk.package_id, lines: [{ label: 'All in', amount_cents: 11500, kind: 'base' }] }, t3);
   eq(r.ok, true);
   eq(table('TemplateLines').filter(l => l.package_id === pk.package_id).length, 1);
-  eq(table('TemplateLines').length, 24 + 1, 'seeded 24 + 1');
+  eq(table('TemplateLines').length, 21 + 1, 'seeded 21 + 1');
   const bad = call(env, 'catalog.saveTemplateLines', { package_id: pk.package_id, lines: [{ label: 'x', amount_cents: 12.5 }] }, t3);
   eq(bad.error.message, 'Line 1 amount must be an amount up to $100,000.');
   eq(call(env, 'catalog.saveTemplateLines', { package_id: pk.package_id, lines: [{ label: 'x', amount_cents: 10000001 }] }, t3).error.code, 'VALIDATION');
@@ -551,7 +551,7 @@ test('docs.save creates an invoice with TR-1001, draft, awaiting payment, server
   eq(inv.doc.number, 'TR-1001'); eq(inv.doc.status, 'draft'); eq(inv.doc.stage, 'awaiting_payment');
   eq(inv.doc.subtotal_cents, 27500); eq(inv.doc.total_cents, 27500); eq(inv.doc.upfront_percent, 100);
   ok(inv.doc.public_id.length >= 24, 'public id');
-  eq(inv.items.length, 1); eq(inv.items[0].lines.length, 7); eq(inv.items[0].details.style, 'womens');
+  eq(inv.items.length, 1); eq(inv.items[0].lines.length, 6); eq(inv.items[0].details.style, 'womens');
   eq(inv.customer.customer_id, custId);
   eq(inv.log.map(l => l.action), ['created']);
   eq(inv.doc.flags.not_sent, true); eq(inv.doc.amount_due_cents, 27500); eq(inv.doc.payment_status, 'unpaid');
@@ -575,7 +575,7 @@ test('editing keeps item and line ids the app sends, and replaces the old rows',
   eq(r.data.items[0].lines[6].line_id, 'L_left_sleeve1');
   eq(table('DocLines').filter(l => l.doc_id === inv.doc.doc_id).length, 7);
   eq(table('DocItems').filter(l => l.doc_id === inv.doc.doc_id).length, 1);
-  eq(r.data.doc.total_cents, 27800 + 1000); // the 6 base lines ($278) + left sleeve $10
+  eq(r.data.doc.total_cents, 27500 + 1000); // the 6 base lines ($275) + left sleeve $10
 });
 
 test('bad ids from the app are replaced; duplicate ids are not reused', () => {
@@ -700,7 +700,7 @@ test('customer page response contains only customer-safe fields (acceptance 20)'
   eq(r.data.business.zelle_contact, '623-523-7472'); eq(r.data.business.zelle_display_name, 'THERESA ODOM');
   eq(r.data.business.terms.length, 8);
   eq(r.data.doc.amount_due_cents, 27500); eq(r.data.doc.payment_status, 'unpaid');
-  eq(r.data.items[0].lines.length, 7); eq(Object.keys(r.data.items[0].lines[0]).sort(), ['amount_cents', 'label']);
+  eq(r.data.items[0].lines.length, 6); eq(Object.keys(r.data.items[0].lines[0]).sort(), ['amount_cents', 'label']);
   eq(r.data.items[0].details.style, "Women's");
   eq(r.data.items[0].details.spots, [{ label: 'Back', patch_no: '30', patch_name: 'OES chenille letters', own_patch: false, notes: '' }]);
 });
@@ -1072,6 +1072,48 @@ test('patch photo: upload replaces the old one and shows on the catalog', () => 
   eq(call(env, 'photos.upload', { patch_no: '999', data: tinyJpeg }, t7).error.code, 'NOT_FOUND');
 });
 
+
+/* ---------------- Nov 2026: package savings line removed ---------------- */
+test('removePackageSavings: packages and unsent drafts lose the savings line, totals unchanged; sent orders untouched', () => {
+  const m = makeEnv(['123456', '123456']); m.ctx.setup();
+  const mc = (a, p, t) => call(m, a, p, t);
+  const tok2 = mc('auth.login', { passcode: '123456' }).data.token;
+  const mt = (n) => vm.runInContext(`readTable_(${JSON.stringify(n)})`, m.ctx);
+  // Put the old seed back: Setup $40 plus a -$3 savings line on each jacket package.
+  const b = mc('bootstrap', {}, tok2).data;
+  const jackets = b.packages.filter(p => ['Standard', 'Premium', "Collector's"].includes(p.name));
+  jackets.forEach(pk => {
+    const lines = b.templateLines.filter(l => l.package_id === pk.package_id).map(l => ({ label: l.label, amount_cents: /^Setup/.test(l.label) ? 4000 : l.amount_cents, kind: l.kind }));
+    mc('catalog.saveTemplateLines', { package_id: pk.package_id, lines: lines.concat([{ label: 'Package savings', amount_cents: -300, kind: 'savings' }]) }, tok2);
+  });
+  const b2 = mc('bootstrap', {}, tok2).data;
+  const std = b2.packages.find(p => p.name === 'Standard');
+  const oldLines = b2.templateLines.filter(l => l.package_id === std.package_id).map(l => ({ label: l.label, amount_cents: l.amount_cents, kind: l.kind }));
+  eq(oldLines.reduce((t, l) => t + l.amount_cents, 0), 27500);
+  const cust = mc('customers.save', { name: 'Mig Test' }, tok2).data.customer.customer_id;
+  const mk = (type) => mc('docs.save', { type, customer_id: cust, items: [{ product_id: std.product_id, package_id: std.package_id, title: 'Jacket', qty: 1, lines: oldLines }] }, tok2).data;
+  const draftInv = mk('invoice'), draftQuote = mk('quote'), sent = mk('invoice');
+  mc('docs.markSent', { doc_id: sent.doc.doc_id }, tok2);
+
+  const r = vm.runInContext('removePackageSavings_()', m.ctx);
+  eq(r.packages.sort(), ["Collector's", 'Premium', 'Standard']);
+  eq(r.drafts.sort(), [draftInv.doc.number, draftQuote.doc.number].sort());
+  eq(mt('TemplateLines').filter(l => l.kind === 'savings').length, 0);
+  const sum = (name) => { const pk = b2.packages.find(p => p.name === name); return mt('TemplateLines').filter(l => l.package_id === pk.package_id).reduce((t, l) => t + l.amount_cents, 0); };
+  eq([sum('Standard'), sum('Premium'), sum("Collector's")], [27500, 33500, 40500]);
+  eq(mt('TemplateLines').find(l => l.package_id === std.package_id && /^Setup/.test(l.label)).amount_cents, 3700);
+  [draftInv, draftQuote].forEach(d => {
+    const got = mc('docs.get', { doc_id: d.doc.doc_id }, tok2).data;
+    eq(got.items[0].lines.some(l => l.kind === 'savings'), false);
+    eq(got.items[0].lines.reduce((t, l) => t + l.amount_cents, 0), 27500);
+    eq(got.doc.total_cents, 27500);
+  });
+  const s2 = mc('docs.get', { doc_id: sent.doc.doc_id }, tok2).data;
+  eq(s2.items[0].lines.some(l => l.kind === 'savings'), true, 'sent order keeps its line');
+  // Running again changes nothing.
+  const again = vm.runInContext('removePackageSavings_()', m.ctx);
+  eq([again.packages.length, again.drafts.length], [0, 0]);
+});
 
 /* ---------------- profit tracking: costs, time, typical costs ---------------- */
 // Own fresh back end, so the profit numbers are exact.
