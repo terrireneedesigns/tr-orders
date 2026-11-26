@@ -1246,10 +1246,13 @@ test('profit: costs and time never reach the customer page', () => {
   ['tracking', 'each_cents', 'Bomber blank', 'Airbrushing', 'minutes', 'labor'].forEach(w => ok(pub.indexOf(w) === -1, 'leaked ' + w));
 });
 
-test('profit: clearTestOrders also clears costs and time', () => {
+test('profit: clearTestOrders clears order costs and time but keeps general costs', () => {
+  const general = ptable('Costs').filter(c => !c.doc_id).length; ok(general >= 2, 'has general costs');
+  ok(ptable('Costs').some(c => c.doc_id), 'has order costs');
   penv.answers.push('CLEAR', 'NO');
   eq(penv.ctx.clearTestOrders(), 'cleared');
-  eq(ptable('Costs').length, 0); eq(ptable('TimeLog').length, 0);
+  eq(ptable('Costs').length, general); ok(ptable('Costs').every(c => !c.doc_id));
+  eq(ptable('TimeLog').length, 0);
   eq(ptable('PackageCosts').length, 3, 'typical costs kept');
 });
 

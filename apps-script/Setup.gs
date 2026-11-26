@@ -338,7 +338,7 @@ var SEED_PATCHES = [
 
 /* ---------- before going live: clear test orders ---------- */
 
-var ORDER_TABS = ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 'Photos', 'Costs', 'TimeLog', 'Log'];
+var ORDER_TABS = ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 'Photos', 'TimeLog', 'Log'];
 
 /**
  * Run from the editor once testing is finished. Makes a backup copy first, then removes every
@@ -349,8 +349,8 @@ var ORDER_TABS = ['Documents', 'DocItems', 'DocLines', 'Payments', 'Checklist', 
 function clearTestOrders() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.prompt('Clear test orders',
-    'This removes ALL quotes, invoices, payments, checklists, order photos, costs, time entries and activity, and restarts numbering at ' +
-    'Q-1001 and TR-1001. A backup copy is made first. Products, patches and settings stay.\n\nType CLEAR to continue.',
+    'This removes ALL quotes, invoices, payments, checklists, order photos, order costs, time entries and activity, and restarts numbering at ' +
+    'Q-1001 and TR-1001. A backup copy is made first. Products, patches, settings and general costs (not tied to an order) stay.\n\nType CLEAR to continue.',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK || r.getResponseText().trim() !== 'CLEAR') {
     ui.alert('Clear test orders', 'Nothing was changed.', ui.ButtonSet.OK);
@@ -360,6 +360,8 @@ function clearTestOrders() {
   var backup = runBackup_();
   withLock_(function () {
     ORDER_TABS.concat(alsoCustomers ? ['Customers'] : []).forEach(function (t) { rewriteTable_(t, []); });
+    // Costs on orders go with the orders; general costs (no order: patch stock, tools) are real spending and stay.
+    rewriteTable_('Costs', readTable_('Costs').filter(function (c) { return !c.doc_id; }));
     readTable_('Settings').forEach(function (row) {
       if (row.key === 'next_quote_no' || row.key === 'next_order_no') { row.value = '1001'; updateRow_('Settings', row); }
     });

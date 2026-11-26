@@ -205,7 +205,7 @@ Editing the Sheet by hand is fine (for example fixing a typo in a patch name). T
 
 ## Going live checklist
 
-1. **Clear the test orders.** In Apps Script, open **Setup.gs**, choose **clearTestOrders**, click **Run**, and answer in the Sheet's tab (type `CLEAR`). It saves a backup first, removes every quote, invoice, payment, checklist tick, order photo, cost, time entry and activity entry, restarts numbering at Q-1001 and TR-1001, and asks whether to remove customers too. Products, patches, typical costs, settings and sign-ins stay.
+1. **Clear the test orders.** In Apps Script, open **Setup.gs**, choose **clearTestOrders**, click **Run**, and answer in the Sheet's tab (type `CLEAR`). It saves a backup first, removes every quote, invoice, payment, checklist tick, order photo, order cost, time entry and activity entry, restarts numbering at Q-1001 and TR-1001, and asks whether to remove customers too. Products, patches, typical costs, general costs (not tied to an order), settings and sign-ins stay.
 2. **Emails:** make sure `setupNotifications` has been run once (Part 2B). Approve a test quote before step 1 to see the email arrive.
 3. **Each phone:** add TR Orders to the Home Screen from Safari and sign in ([INSTALL-IPHONE.md](INSTALL-IPHONE.md)). Settings shows the app version at the bottom.
 4. **Still open (SPEC 17):**
